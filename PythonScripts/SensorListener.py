@@ -15,7 +15,7 @@ class SensorListener(threading.Thread):
     buffer = ""  # Oldest element is first
 
     def __init__(self):
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self)  # calls constructor of the Thread class
         try:
             self.port = serial.Serial('COM3', 9600, timeout=0)  # for COM3
         except:
