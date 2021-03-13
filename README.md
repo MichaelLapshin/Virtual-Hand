@@ -1,5 +1,5 @@
 # Virtual-Hand
-A force sensor system which uses an AI to control a virtual hand.
+A force sensor system which uses machine learning to control a virtual hand.
 
 
 # First proof-of-concept prototype demonstration:
@@ -9,4 +9,4 @@ https://www.youtube.com/watch?v=WTqG79DlvvM
 
 
 # Plans for the next version:
-- Use a deep-learning neural network to accurately correlate simulated forces with sensor readings.
+- Use a neural network to accurately correlate simulated forces with sensor readings.
