@@ -60,10 +60,6 @@ class HandAngleReader(threading.Thread):
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FPS, framerate)  # Sets FPS of the video feed to 10 FPS
 
-        # Resolution set to be equal in order to keep trigonometry more consistent
-        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
         self.start()
 
     # Continuously reads from the camera feed
@@ -77,8 +73,7 @@ class HandAngleReader(threading.Thread):
                 image = orig_image[
                         int(shape[0] / 2 - self.resolution / 2):int(shape[0] / 2 + self.resolution / 2),
                         int(shape[1] / 2 - self.resolution / 2):int(shape[1] / 2 + self.resolution / 2), :].copy()
-                # print(image.shape)
-                # image = cv2.resize(original_image, (500, 500), interpolation=cv2.INTER_CUBIC)
+
                 if not success:
                     print("Ignoring empty camera frame.")
                     # If loading a video, use 'break' instead of 'continue'.
@@ -154,11 +149,3 @@ class HandAngleReader(threading.Thread):
 
     def get_pinky_angles(self):
         return self.limb_angles[4]
-
-# angleReader = HandAngleReader(framerate=10, resolution=400)
-
-# while (1):
-#     print(angleReader.get_index_angles()[0] * 180 / 3.14)
-#     print(angleReader.get_index_angles()[1] * 180 / 3.14)
-#     print(angleReader.get_index_angles()[2] * 180 / 3.14)
-#     time.sleep(0.5)
