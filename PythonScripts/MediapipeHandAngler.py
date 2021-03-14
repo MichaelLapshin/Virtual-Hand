@@ -5,11 +5,15 @@
     - Some code was taken from https://google.github.io/mediapipe/solutions/hands for capturing and processing the video feed with mediapipe.
 """
 
-import time
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # To remove the redundant warnings
 import numpy
 import threading
 import cv2
 import mediapipe as mp
+
+
+print("Imported the MediapipeHandAngler.py class successfully.")
 
 
 def normalized_3d_vector(v):
@@ -46,9 +50,12 @@ class HandAngleReader(threading.Thread):
     limb_angles = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]
     framerate = 10
     resolution = 100
+    running = True
 
     def __init__(self, framerate=30, resolution=480):
         threading.Thread.__init__(self)  # calls constructor of the Thread class
+        self.daemon = True
+
         self.framerate = framerate
         self.resolution = resolution
 
@@ -68,7 +75,7 @@ class HandAngleReader(threading.Thread):
         # Processes and displays video feed
         with self.mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.85,
                                  min_tracking_confidence=0.1, static_image_mode=False) as hands:
-            while self.cap.isOpened():
+            while self.cap.isOpened() and self.running:
                 success, orig_image = self.cap.read()
                 shape = (640, 480)
                 image = orig_image[
@@ -129,8 +136,8 @@ class HandAngleReader(threading.Thread):
                 self.mp_drawing.draw_landmarks(image, hand_landmarks, self.mp_hands.HAND_CONNECTIONS)
         cv2.imshow('MediaPipe Hands', image)
 
-    def stop(self):
-        self.close()
+    def quit(self):
+        self.running = False
 
     # Getters for limb angles
     def get_all_limb_angles(self):
