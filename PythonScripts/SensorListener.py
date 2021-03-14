@@ -1,6 +1,6 @@
 """
 [SensorListener.py]
-#description: API for receiving data from COM3 port.
+@description: API for receiving data from COM3 port.
 @author: Michael Lapshin
 """
 
@@ -11,8 +11,10 @@ import threading
 print("Imported the SensorListener.py class successfully.")
 
 
-class SensorListener(threading.Thread):
+class SensorReadingsListener(threading.Thread):
     buffer = ""  # Oldest element is first
+    sensorReadings = {}
+    wait4readings = True
 
     def __init__(self):
         threading.Thread.__init__(self)  # calls constructor of the Thread class
@@ -34,19 +36,40 @@ class SensorListener(threading.Thread):
             ser_bytes = self.port.readline()
             time.sleep(1)
             inp = ser_bytes.decode('uft-8')
-            print(inp)  # todo, remove this when you're done with testing
             self.buffer.append(inp)  # adds to the end of the queue
         except:
             print("Could not read from COM3 port.")
 
-    # nextData()
-    # @return [sensorID#, sensorReading]
-    #     [0,0] is a null-no data return
-    def next_data(self):
-        # If the buffer has accumulated enough data for a sensor, then it returns that value as requested
-        if len(self.buffer.split(" ")) > 2:
-            sensor, reading = self.buffer.split(" ")[0:1]
-            self.buffer.lstrip(sensor + " " + reading + " ")  # removes data point from the buffer
-            return [sensor, int(reading)]
-        else:
-            return [0, 0]
+        # Adds all sensor data accumulated in the buffer to the dictionary
+        raw_buffer_data = self.buffer.split(" ")
+        if len(raw_buffer_data) > 0:
+            for index in range(0, len(int(raw_buffer_data) / 2) - 1):
+                if self.sensorReadings.has_keys(raw_buffer_data[index * 2]):
+                    self.sensorReadings.add(raw_buffer_data[index * 2], int(raw_buffer_data[index * 2 + 1]))
+                else:
+                    self.sensorReadings[raw_buffer_data[index * 2]] = int(raw_buffer_data[index * 2 + 1])
+
+        # Checks if the dictionary is filled so that it can be used
+        all_keys_have_values = True
+        for readingKey in self.sensorReadings.keys():
+            if self.sensorReadings.get(readingKey) is None:
+                all_keys_have_values = False
+                break
+        if all_keys_have_values:
+            self.wait4readings = False
+
+    # Returns unique keys, to be used after the system is setup for accuracy
+    def get_key_list(self):
+        return self.sensorReadings.keys()
+
+    # Getter for the batch of sensor readings list
+    def get_readings_frame(self):
+        if not self.wait4readings:
+            return self.sensorReadings
+        return None
+
+    # Adds a tag that will not allow data to return if the data set is not complete
+    def wait4new_readings(self):
+        for readingKey in self.sensorReadings.keys():
+            self.sensorReadings[readingKey] = None
+        self.wait4readings = True

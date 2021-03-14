@@ -1,6 +1,6 @@
 """
 [main.py]
-@description: This script is used to record and store data about hand limbs and sensor readings for the server machine learning model to use.
+@description: Script for obtaining finger limb angles and displaying video feed.
 @author: Michael Lapshin
     - Some code was taken from https://google.github.io/mediapipe/solutions/hands for capturing and processing the video feed with mediapipe.
 """
@@ -47,7 +47,7 @@ class HandAngleReader(threading.Thread):
     framerate = 10
     resolution = 100
 
-    def __init__(self, framerate=10, resolution=100):
+    def __init__(self, framerate=30, resolution=480):
         threading.Thread.__init__(self)  # calls constructor of the Thread class
         self.framerate = framerate
         self.resolution = resolution
@@ -60,6 +60,7 @@ class HandAngleReader(threading.Thread):
         self.cap = cv2.VideoCapture(0)
         self.cap.set(cv2.CAP_PROP_FPS, framerate)  # Sets FPS of the video feed to 10 FPS
 
+    def start_thread(self):
         self.start()
 
     # Continuously reads from the camera feed
