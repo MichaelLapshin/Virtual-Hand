@@ -51,7 +51,7 @@ training_framerate = int(input("What is your desired framerate (FPS)?"))
 training_delay = int(input(
     "How much setup time do you need before starting to store the data? (Starts timer starts after you enter the input)"))
 
-time.sleep(max(training_delay-3,0))
+time.sleep(max(training_delay - 3, 0))
 print("Starting the training in")
 print("3...")
 time.sleep(1)
@@ -94,11 +94,16 @@ for key in key_list:
     key_index += 1
     sensor_list.append([])
 
+
+def time_ms():
+    return int(round(time.time() * 1000))
+
+
 # The data gathering
-zero_time_ns = time.time_ns()
+zero_time_ms = time_ms()
 for frame_num in range(0, seconds_training * training_framerate):
     # Halts the program until it is time to take the next frame of the training data
-    while time.time_ns() - zero_time_ns < 1000000000/training_framerate * frame_num:
+    while time_ms() - zero_time_ms < 1000 / training_framerate * frame_num:
         time.sleep(0.01)
 
     current_sensor_data = None
@@ -118,7 +123,7 @@ for frame_num in range(0, seconds_training * training_framerate):
         for limb_index in range(0, 3):
             angle_list[finger_index][limb_index].append(limb_data[finger_index][limb_index])
     # Adds time data
-    time_list.append(time.time_ns() - zero_time_ns)
+    time_list.append(time_ms() - zero_time_ms)
 
 print("The training sequence is now complete.")
 

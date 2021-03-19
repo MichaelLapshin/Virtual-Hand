@@ -13,19 +13,28 @@ public class UserComponent : MonoBehaviour
     private float[] torquesToApply;
 
     // Process/training variables
-    private bool training;
+    private bool training = true; // To be hard-coded (for now)
     private Process process;
-    private long timeNS_sinceStart;
 
+    // Hands-on training variables
+    private int resetCount = 0;
+    private long sequenceStartTimeMs;
+    private long nextFrameTimeMs = 0;
+    private bool waitingForNewFrame;
 
     // Start is called before the first frame update
     void Start()
     {
         // Object fetching related logic
-        movableLimbs = FindObjectsOfType<HingeJoint>(); // Should return all the finger limbs
+        HingeJoint[]
+            hingeObjects =
+                FindObjectsOfType(
+                    typeof(HingeJoint)) as HingeJoint[]; // Should return all the finger limbs (since they have joints)
+
         rigidBodies = new Rigidbody[movableLimbs.Length];
         for (int i = 0; i < movableLimbs.Length; i++)
         {
+            movableLimbs[i] = hingeObjects[i].gameObject;
             rigidBodies[i] = ((GameObject) movableLimbs[i]).GetComponent(typeof(Rigidbody)) as Rigidbody;
         }
 
@@ -33,15 +42,14 @@ public class UserComponent : MonoBehaviour
         torquesToApply = new float[movableLimbs.Length];
 
         // Model related logic
-        training = true;
-
         process = new Process();
-        process.StartInfo.Arguments = "training_dataset_NAME.txt";
 
         // Calls python training script.
         if (training == true)
         {
             process.StartInfo.FileName = "ModelTrainer.py";
+            string dataSetName = "training_dataset_NAME.txt"; // To be hard-coded (for now)
+            process.StartInfo.Arguments = dataSetName;
         }
         else
         {
@@ -60,18 +68,21 @@ public class UserComponent : MonoBehaviour
             if (acknowledgement.Equals("Ready") == false)
             {
                 Console.Error.Write("Did not receive acknowledgement from Python script.");
-                this.enabled = false; // Kills this script.
-                return;
+                Quit();
             }
-
-            // Obtains starting angles from the python script
-            string[] stringBaseAngles = process.StandardOutput.ReadLine().Split(' ');
-            for (int i = 0; i < stringBaseAngles.Length; i++)
+            else
             {
-                startingAngles[i] = float.Parse(stringBaseAngles[i]);
-            }
+                // Obtains starting angles from the python script
+                string[] stringBaseAngles = process.StandardOutput.ReadLine().Split(' ');
+                for (int i = 0; i < stringBaseAngles.Length; i++)
+                {
+                    startingAngles[i] = float.Parse(stringBaseAngles[i]);
+                }
 
-            ResetHandPhysics();
+                waitingForNewFrame = true;
+                ResetTrainingSequence();
+                Ready();
+            }
         }
         else
         {
@@ -82,63 +93,108 @@ public class UserComponent : MonoBehaviour
     {
         if (training == true)
         {
-            // todo, complete time-syncing logic
-            
-            // Composes the message to send to the python script
-            string toSend = "";
-            for (int i = 0; i < movableLimbs.Length; i++)
+            // Step Loop-0 (as per Pprotocol)
+            if (waitingForNewFrame == true)
             {
-                if (i != 0)
-                {
-                    toSend += " ";
-                }
-
-                toSend += movableLimbs[i].transform.eulerAngles.x + " " + rigidBodies[i].angularVelocity.x;
+                nextFrameTimeMs = long.Parse(process.StandardOutput.ReadLine());
+                waitingForNewFrame = false;
             }
 
-            // Sends data to python script
-            process.StandardInput.WriteLine(toSend);
-            process.StandardInput.Flush();
-
-            string nextCommand = process.StandardOutput.ReadLine();
-            if (nextCommand.Equals("Failed"))
+            // Step Loop-1 (as per protocol)
+            if (getMilisecond() - sequenceStartTimeMs > nextFrameTimeMs)
             {
-                //todo, do the restarting sequence
-            }
-            else if (nextCommand.Equals("Quit"))
-            {
-                this.enabled = false; // Kills this script.
-                return;
-            }
-            else if (nextCommand.Equals("Next"))
-            {
-                // Obtains and applies torques from python script to the limbs
-                string[] stringTorques = process.StandardOutput.ReadLine().Split(' ');
+                // Step Loop-2 (as per protocol)
+                // Composes the message to send to the python script
+                string toSend = "";
                 for (int i = 0; i < movableLimbs.Length; i++)
                 {
-                    rigidBodies[i].AddTorque(new Vector3(float.Parse(stringTorques[i]), 0, 0), ForceMode.Force);
+                    if (i != 0)
+                    {
+                        toSend += " ";
+                    }
+
+                    toSend += movableLimbs[i].transform.eulerAngles.x + " " + rigidBodies[i].angularVelocity.x;
                 }
-            }
-            else
-            {
-                Console.WriteLine(
-                    "Unknown nextCommand sent from python script (" + nextCommand + "). Aborting program.");
-                this.enabled = false; // Kills this script.
-                return;
+
+                // Sends data to python script
+                // Step Loop-3 (as per protocol)
+                process.StandardInput.WriteLine(getMilisecond() - sequenceStartTimeMs);
+                process.StandardInput.Flush();
+                // Step Loop-4 (as per protocol)
+                process.StandardInput.WriteLine(toSend);
+                process.StandardInput.Flush();
+
+                // Step Loop-5 (as per protocol)
+                string nextCommand = process.StandardOutput.ReadLine();
+                // Step Loop-6 (as per protocol)
+                if (nextCommand.Equals("Reset"))
+                {
+                    ResetTrainingSequence();
+                    waitingForNewFrame = true;
+                    Ready();
+                }
+                else if (nextCommand.Equals("Quit"))
+                {
+                    Quit();
+                }
+                else if (nextCommand.Equals("Next"))
+                {
+                    // Obtains and applies torques from python script to the limbs
+                    string[] stringTorques = process.StandardOutput.ReadLine().Split(' ');
+                    for (int i = 0; i < movableLimbs.Length; i++)
+                    {
+                        rigidBodies[i].AddTorque(new Vector3(float.Parse(stringTorques[i]), 0, 0), ForceMode.Force);
+                    }
+
+                    waitingForNewFrame = true;
+                    Ready();
+                }
+                else
+                {
+                    Console.WriteLine(
+                        "Unknown nextCommand sent from python script (" + nextCommand + "). Aborting program.");
+                    Quit();
+                }
             }
         }
         else
         {
+            // Non-training code goes here
         }
     }
 
-    private void ResetHandPhysics()
+    private void ResetTrainingSequence()
     {
+        resetCount++;
+        Console.WriteLine("The system is resetting. Reset #" + resetCount);
         for (int i = 0; i < movableLimbs.Length; i++)
         {
             ((GameObject) movableLimbs[i]).transform.eulerAngles.Set(startingAngles[i], 0, 0);
             rigidBodies[i].velocity = Vector3.zero;
             rigidBodies[i].angularVelocity = Vector3.zero;
         }
+        
+        sequenceStartTimeMs = getMilisecond();
+    }
+
+    // Returns current time in miliseconds
+    private long getMilisecond()
+    {
+        return System.DateTime.Now.ToUniversalTime().Millisecond;
+    }
+
+    private void Ready()
+    {
+        process.StandardInput.WriteLine("Ready");
+        process.StandardInput.Flush();
+    }
+
+    private void Quit()
+    {
+        Console.WriteLine("Stopping the script in 10 seconds...");
+        System.Threading.Thread.Sleep(10000); // Sleeps for 10 seconds
+        Console.WriteLine("Stopped.");
+        this.enabled = false; // Kills this script.
+        return;
     }
 }
