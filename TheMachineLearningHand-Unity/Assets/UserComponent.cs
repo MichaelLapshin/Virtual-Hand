@@ -49,7 +49,8 @@ public class UserComponent : MonoBehaviour
         {
             process.StartInfo.FileName = "ModelTrainer.py";
             string dataSetName = "training_dataset_NAME.txt"; // To be hard-coded (for now)
-            process.StartInfo.Arguments = dataSetName;
+            string modelName = "model_name.txt";
+            process.StartInfo.Arguments = dataSetName + modelName;
         }
         else
         {

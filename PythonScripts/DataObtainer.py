@@ -1,6 +1,6 @@
 """
 [DataObtainer.py]
-#description: Script for obtaining finger angles and sensor readings.
+@description: Script for obtaining finger angles and sensor readings.
 @author: Michael Lapshin
 """
 import os

@@ -1,3 +1,9 @@
+"""
+[HDF5_FileReader.py]
+@description: Script for peeking into what the HDF5 files have stored.
+@author: Michael Lapshin
+"""
+
 import h5py
 
 training_name = input("Enter the training name: ")
