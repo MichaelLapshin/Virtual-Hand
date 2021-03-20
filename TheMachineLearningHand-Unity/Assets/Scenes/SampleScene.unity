@@ -139,7 +139,7 @@ GameObject:
   - component: {fileID: 43394255}
   - component: {fileID: 43394254}
   m_Layer: 0
-  m_Name: Proximal Limb
+  m_Name: m Proximal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -202,7 +202,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: -0.0699, y: -0.0444, z: 0}
+  m_ConnectedAnchor: {x: -0.0699, y: 0.0000000037252903, z: -0.044400003}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -336,7 +336,7 @@ GameObject:
   - component: {fileID: 138832072}
   - component: {fileID: 138832076}
   m_Layer: 0
-  m_Name: Proximal Limb
+  m_Name: a Proximal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -385,7 +385,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0.064564146, y: -0.085371695, z: -0.0070740734}
+  m_ConnectedAnchor: {x: 0.064564146, y: 0.0070740804, z: -0.0853717}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -872,6 +872,7 @@ GameObject:
   m_Component:
   - component: {fileID: 904628031}
   - component: {fileID: 904628030}
+  - component: {fileID: 904628032}
   m_Layer: 0
   m_Name: Hand
   m_TagString: Untagged
@@ -902,7 +903,7 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 904628029}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: 0.7071068, y: 0, z: 0, w: 0.7071068}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 0.03, y: 0.03, z: 0.03}
   m_Children:
@@ -921,7 +922,19 @@ Transform:
   - {fileID: 811201898}
   m_Father: {fileID: 0}
   m_RootOrder: 2
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_LocalEulerAnglesHint: {x: 90, y: 0, z: 0}
+--- !u!114 &904628032
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 904628029}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2d86f9c3965a8014992ffaea89b5f2f3, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &907598625
 GameObject:
   m_ObjectHideFlags: 0
@@ -938,7 +951,7 @@ GameObject:
   - component: {fileID: 907598629}
   - component: {fileID: 907598628}
   m_Layer: 0
-  m_Name: Proximal Limb
+  m_Name: g Proximal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1001,7 +1014,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0, y: -0.0252, z: 0}
+  m_ConnectedAnchor: {x: 0, y: 0.0000000037252903, z: -0.025200004}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -1297,7 +1310,7 @@ GameObject:
   - component: {fileID: 1089922089}
   - component: {fileID: 1089922088}
   m_Layer: 0
-  m_Name: Proximal Limb
+  m_Name: j Proximal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1360,7 +1373,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: -0.0357, y: -0.0321, z: 0}
+  m_ConnectedAnchor: {x: -0.0357, y: 0.0000000037252903, z: -0.032100003}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -1463,7 +1476,7 @@ GameObject:
   - component: {fileID: 1102222363}
   - component: {fileID: 1102222362}
   m_Layer: 0
-  m_Name: Middle Limb
+  m_Name: h Middle Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1526,7 +1539,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0, y: 0.9732188, z: 0}
+  m_ConnectedAnchor: {x: 0, y: 0.97321904, z: 0}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -1851,7 +1864,7 @@ GameObject:
   - component: {fileID: 1434042967}
   - component: {fileID: 1434042966}
   m_Layer: 0
-  m_Name: Distal Limb
+  m_Name: i Distal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1897,7 +1910,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0, y: 0.987778, z: 0}
+  m_ConnectedAnchor: {x: 0, y: 0.98777884, z: 0}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -2016,7 +2029,7 @@ GameObject:
   - component: {fileID: 1488575021}
   - component: {fileID: 1488575025}
   m_Layer: 0
-  m_Name: Middle Limb
+  m_Name: b Middle Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2065,7 +2078,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0.00000023179585, y: 0.97321886, z: -0.00000022351743}
+  m_ConnectedAnchor: {x: 0.000000430478, y: 0.9732185, z: -0.00000016556847}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -2213,7 +2226,7 @@ GameObject:
   - component: {fileID: 1549016814}
   - component: {fileID: 1549016813}
   m_Layer: 0
-  m_Name: Distal Limb
+  m_Name: f Distal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2259,7 +2272,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0.0000001261474, y: 0.9877775, z: 0}
+  m_ConnectedAnchor: {x: 0.0000001261474, y: 0.9877783, z: 0}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -2726,7 +2739,7 @@ GameObject:
   - component: {fileID: 1835070183}
   - component: {fileID: 1835070182}
   m_Layer: 0
-  m_Name: Middle Limb
+  m_Name: n Middle Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2892,7 +2905,7 @@ GameObject:
   - component: {fileID: 1835118057}
   - component: {fileID: 1835118056}
   m_Layer: 0
-  m_Name: Middle Limb
+  m_Name: k Middle Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2955,7 +2968,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: -0.00000011141054, y: 0.9732188, z: 0}
+  m_ConnectedAnchor: {x: -0.00000011141054, y: 0.973219, z: 0}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -3058,7 +3071,7 @@ GameObject:
   - component: {fileID: 1864156131}
   - component: {fileID: 1864156130}
   m_Layer: 0
-  m_Name: Distal Limb
+  m_Name: l Distal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3104,7 +3117,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: -0.0000001237895, y: 0.9877775, z: 0}
+  m_ConnectedAnchor: {x: -0.0000001237895, y: 0.987778, z: 0}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -3223,7 +3236,7 @@ GameObject:
   - component: {fileID: 1904456318}
   - component: {fileID: 1904456317}
   m_Layer: 0
-  m_Name: Distal Limb
+  m_Name: o Distal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3269,7 +3282,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: -0.00000029434395, y: 0.98777777, z: 0}
+  m_ConnectedAnchor: {x: -0.00000029434395, y: 0.9877783, z: 0}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -3388,7 +3401,7 @@ GameObject:
   - component: {fileID: 1938358373}
   - component: {fileID: 1938358378}
   m_Layer: 0
-  m_Name: Distal Limb
+  m_Name: c Distal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3420,7 +3433,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0.000000110378984, y: 0.98777777, z: -0.000000018396497}
+  m_ConnectedAnchor: {x: 0.00000022075797, y: 0.98777777, z: 0.00000007358599}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -3553,7 +3566,7 @@ GameObject:
   - component: {fileID: 2089931925}
   - component: {fileID: 2089931924}
   m_Layer: 0
-  m_Name: Proximal Limb
+  m_Name: d Proximal Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3616,7 +3629,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0.036000002, y: -0.031499997, z: 0}
+  m_ConnectedAnchor: {x: 0.036000002, y: 0.0000000037252903, z: -0.0315}
   m_UseSpring: 0
   m_Spring:
     spring: 0
@@ -3830,7 +3843,7 @@ GameObject:
   - component: {fileID: 2108902688}
   - component: {fileID: 2108902687}
   m_Layer: 0
-  m_Name: Middle Limb
+  m_Name: e Middle Limb
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -3893,7 +3906,7 @@ HingeJoint:
   m_Anchor: {x: 0, y: -1, z: 0}
   m_Axis: {x: 1, y: 0, z: 0}
   m_AutoConfigureConnectedAnchor: 1
-  m_ConnectedAnchor: {x: 0.00000011353266, y: 0.97321886, z: 0}
+  m_ConnectedAnchor: {x: 0.00000011353266, y: 0.9732191, z: 0}
   m_UseSpring: 0
   m_Spring:
     spring: 0
