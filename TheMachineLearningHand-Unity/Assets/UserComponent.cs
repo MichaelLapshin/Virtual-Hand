@@ -92,6 +92,12 @@ public class UserComponent : MonoBehaviour
 
     private void FixedUpdate()
     {
+        // Continuously applies existing torques to the limbs
+        for (int i = 0; i < movableLimbs.Length; i++)
+        {
+            rigidBodies[i].AddTorque(new Vector3(torquesToApply[i], 0, 0), ForceMode.Force);
+        }
+        
         if (training == true)
         {
             // Step Loop-0 (as per Pprotocol)
@@ -144,7 +150,8 @@ public class UserComponent : MonoBehaviour
                     string[] stringTorques = process.StandardOutput.ReadLine().Split(' ');
                     for (int i = 0; i < movableLimbs.Length; i++)
                     {
-                        rigidBodies[i].AddTorque(new Vector3(float.Parse(stringTorques[i]), 0, 0), ForceMode.Force);
+                        torquesToApply[i] = float.Parse(stringTorques[i]);
+                        // rigidBodies[i].AddTorque(new Vector3(float.Parse(stringTorques[i]), 0, 0), ForceMode.Force);
                     }
 
                     waitingForNewFrame = true;
@@ -173,6 +180,7 @@ public class UserComponent : MonoBehaviour
             ((GameObject) movableLimbs[i]).transform.eulerAngles.Set(startingAngles[i], 0, 0);
             rigidBodies[i].velocity = Vector3.zero;
             rigidBodies[i].angularVelocity = Vector3.zero;
+            torquesToApply[i] = 0;
         }
         
         sequenceStartTimeMs = getMilisecond();
