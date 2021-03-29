@@ -63,8 +63,8 @@ class CustomModel(keras.Model):
         self.num_actions = num_actions
 
         # todo, note, layers.Input is a Keras symbolic thingy
-        # inputs = layers.Input(shape=(num_inputs,))
-        inputs = layers.InputLayer(input_shape=(num_inputs,))
+        inputs = layers.Input(shape=(num_inputs,))
+        # inputs = layers.InputLayer(input_shape=(num_inputs,))
         common = layers.Dense(num_hidden, activation="relu")(inputs)
         actions = layers.Dense(num_actions, activation="softmax")(common)
         critics = layers.Dense(1)(common)
@@ -167,8 +167,7 @@ class CustomModel(keras.Model):
 models = []
 number_of_inputs = number_of_sensors + number_of_limbs * DATA_PER_LIMB
 for i in range(0, number_of_limbs):
-    models.append(CustomModel(env_name="CartPole-v0",
-    # models.append(CustomModel(env_name="HandManipulateBlock-v0",
+    models.append(CustomModel(env_name="hand-controller-v0",
                               num_inputs=number_of_inputs,
                               num_hidden=number_of_limbs * DATA_PER_LIMB,
                               num_actions=len(possible_forces)))
