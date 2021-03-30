@@ -1,0 +1,15 @@
+Exception in thread Thread-1:
+Traceback (most recent call last):
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2288.0_x64__qbz5n2kfra8p0\lib\threading.py", line 932, in _bootstrap_inner
+    self.run()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2288.0_x64__qbz5n2kfra8p0\lib\threading.py", line 870, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Git\Virtual-Hand\PythonScripts\ClientConnectionHandler.py", line 44, in data_receiver_thread_method
+    self.input_buffer += self.s.recv(2048).decode("utf-8")  # todo, make sure it receives newlines
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+Traceback (most recent call last):
+  File "C:\Git\Virtual-Hand\PythonScripts\ModelTrainerV3.py", line 176, in <module>
+    connection_handler.println(string_starting_angles)
+  File "C:\Git\Virtual-Hand\PythonScripts\ClientConnectionHandler.py", line 56, in println
+    self.s.send((message + "\n").encode("utf-8"))
+OSError: [WinError 10038] An operation was attempted on something that is not a socket

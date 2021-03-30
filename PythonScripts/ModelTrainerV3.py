@@ -15,15 +15,22 @@ import tensorflow as tf
 import h5py
 import math
 import time
+import sys
 
 from matplotlib import pyplot as plt
 from tensorflow.keras import layers
 from tensorflow import keras
 from typing import Any, List, Sequence, Tuple
 
+from ClientConnectionHandler import ClientConnectionHandler
+
+connection_handler = ClientConnectionHandler()
+sys.stderr = open("PythonClientError.txt", "w")
+
 # Reads the arguments
-dataset_name = input()
-model_name = input()
+dataset_name = connection_handler.input()
+model_name = connection_handler.input()
+
 
 # Obtains data
 data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + dataset_name + ".hdf5", 'r')
@@ -121,16 +128,9 @@ class CustomModel:
 
             # Backpropagation
             loss_value = tf.constant(sum(actor_losses) + sum(critic_losses), dtype=tf.float32)
-            # loss_value = sum(actor_losses) + sum(critic_losses)
-            # grads = self.tape.gradient(loss_value, self.model.trainable_variables)
-            # grads = tape.gradient(loss_value, self.model.trainable_variables)
-            # print("type", type(loss_value), loss_value)
-            # print("type", type(state), state)
             tape.watch(self.model.trainable_variables)
-            # print("trainable", self.model.trainable_variables)
             grads = tape.gradient(loss_value, self.model.trainable_variables)
 
-        # print("grads is", grads)
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
 
     def compute_reward(self, unity_angle, expected_angle):
@@ -160,18 +160,20 @@ for i in range(0, number_of_limbs):
     #                           num_actions=len(possible_forces)))
     models.append(CustomModel())
 
-time.sleep(0.5)  # todo, to remove?
+# time.sleep(0.5)  # todo, to remove?
 
 """
     Exchanges data between data reference file and Unity
 """
-print("Ready")  # Tells unity to start the training sequence
+connection_handler.println("Ready")  # Tells unity to start the training sequence
+
 string_starting_angles = ""
 for finger_index in range(0, 5):
     for limb_index in range(0, 3):
         string_starting_angles += " " + str(data_set.get("angle")[finger_index][limb_index][0])
 string_starting_angles = string_starting_angles.lstrip(" ")
-print(string_starting_angles)
+
+connection_handler.println(string_starting_angles)
 
 input_train_sensors = data_set.get("sensor")
 input_train_frame_time = data_set.get("time")
@@ -191,18 +193,18 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
         model.reset_episode()
 
     while not failed_episode:
-        is_unity_ready: str = input()
+        is_unity_ready = connection_handler.input()
         if is_unity_ready != "Ready":
-            print(
+            connection_handler.println(
                 "ERROR. C# Unity Script sent improper command. 'Ready' not receives. Received " + is_unity_ready + " instead.")
 
-        print(data_set.get("time")[current_frame_number])
+        connection_handler.println(data_set.get("time")[current_frame_number])
 
         # Receives frame capture time from unity
-        unity_frame_time = int(input())
+        unity_frame_time = int(connection_handler.input())
 
         # Obtains limb data from the C# Unity script
-        string_limb_data = input().rstrip(" \n\r").split(" ")
+        string_limb_data = connection_handler.input().rstrip(" \n\r").split(" ")
         limb_data = []
         for i in range(0, len(string_limb_data)):
             limb_data.append(float(string_limb_data[i]))
@@ -249,16 +251,14 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
 
         # Loop-3 condition
         if current_frame_number >= TOTAL_NUMBER_OF_FRAMES:
-            print("Quit")
+            connection_handler.println("Quit")
             break
         elif not passed_time_condition or not passed_angle_condition:
-            print("Reset")
+            connection_handler.println("Reset")
             failed_episode = True
-            # print("time", passed_time_condition)
-            # print("angle", passed_angle_condition)
             break
         else:
-            print("Next")
+            connection_handler.println("Next")
             """
                 Have access to:
                     - current_limb_angles: unity angles
@@ -272,7 +272,7 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
             string_torques = string_torques.rstrip(" ")
 
             # Sends the torques to the unity script
-            print(string_torques)
+            connection_handler.println(string_torques)
 
             # Increments the frame number for the next loop
             current_frame_number += 1
