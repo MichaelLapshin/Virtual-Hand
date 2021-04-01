@@ -7,9 +7,14 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Net.Sockets;
+using Debug = UnityEngine.Debug;
 
 public class UserComponent : MonoBehaviour
 {
+    // Debugging variables
+    public static bool PRINT_TO_CONSOLE = false;
+    public static bool PRINT_CRITICAL = true;
+
     // Game variables
     private UnityEngine.GameObject[] movableLimbs;
     private UnityEngine.Rigidbody[] rigidBodies;
@@ -23,11 +28,13 @@ public class UserComponent : MonoBehaviour
     private Thread thread;
     private bool running = true;
     private bool requestReset = false;
+    private bool requestLimbData = false;
+    private string stringLimbData = "";
 
     // Hands-on training variables
     private int resetCount = 0;
-    private long sequenceStartTimeMs;
-    private long nextFrameTimeMs = 0;
+    private int sequenceStartTimeMs;
+    private int nextFrameTimeMs = 0;
     private bool waitingForNewFrame;
 
     // Start is called before the first frame update
@@ -64,17 +71,16 @@ public class UserComponent : MonoBehaviour
         /*
          * Starting Sequence
          */
-        // Model related logic
 
+        // Model related logic
         connection = new ClientConnectionHandler();
         process = new Process();
 
         // Calls python training script.
         process.StartInfo.FileName = @"C:\Users\Michael\AppData\Local\Microsoft\WindowsApps\python.exe";
-        string scriptPath = @"C:\Git\Virtual-Hand\PythonScripts\ModelTrainerV3.py";
+        string scriptPath = @"C:\Git\Virtual-Hand\PythonScripts\ModelTrainerV4.py";
         string dataSetName = "RealData15"; // To be hard-coded (for now)
         string modelName = "FirstModelTest";
-        // process.StartInfo.Arguments = scriptPath + " " + dataSetName + " " + modelName;
         process.StartInfo.Arguments = scriptPath;
 
 
@@ -82,27 +88,19 @@ public class UserComponent : MonoBehaviour
         print("Starting the process: " + process.StartInfo.FileName);
         process.StartInfo.UseShellExecute = false;
         process.StartInfo.CreateNoWindow = true;
-        process.StartInfo.RedirectStandardInput = true;
-        process.StartInfo.RedirectStandardOutput = true;
-        process.StartInfo.RedirectStandardError = true;
         process.Start();
-        System.Threading.Thread.Sleep(5000);
+        System.Threading.Thread.Sleep(6000);
 
-        // process.StandardInput.WriteLine(dataSetName);
-        // process.StandardInput.WriteLine(modelName);
-        // process.StandardInput.Flush();
-        // connection.println("Received");
         connection.println(dataSetName);
         connection.println(modelName);
-
 
         print("Started the Python process. ");
 
         // Interactions with the Python Script
-
         // string acknowledgement = stdoutReadLine();
         string acknowledgement = connection.readline();
         print("Acknowledgement from Python: " + acknowledgement);
+
         if (acknowledgement.Equals("Ready") == false)
         {
             print("Did not receive acknowledgement from Python script.");
@@ -110,6 +108,8 @@ public class UserComponent : MonoBehaviour
         }
         else
         {
+            connection.println("Ready");
+
             // Obtains starting angles from the python script
             print("Reading start angles...");
             string[] stringBaseAngles = connection.readline().Split(' ');
@@ -120,19 +120,11 @@ public class UserComponent : MonoBehaviour
 
             print("Expecting start angles...");
             print("Python angles obtained: " + stringBaseAngles.ToString());
-            // for (int i = 0; i < stringBaseAngles.Length; i++)
-            // {
-            // print(stringBaseAngles[i]);
-            // }
-            // print("Python angles obtained length: " + stringBaseAngles.Length);
+
             waitingForNewFrame = true;
-            // ResetTrainingSequence_forThread();
-            // System.Threading.Thread.Sleep(5000);
+
             Ready();
-            // process.StandardInput.WriteLine("Ready");
         }
-        // print("ready apparently sent");
-        // print("RECEIVED " + stdoutReadLine());
 
         /*
          * Process Loop
@@ -142,42 +134,29 @@ public class UserComponent : MonoBehaviour
             // Step Loop-0 (as per Pprotocol)
             if (waitingForNewFrame == true)
             {
-                print("Next will be: ");
-                // nextFrameTimeMs = long.Parse(stdoutReadLine());
-                nextFrameTimeMs = long.Parse(connection.readline());
-                print("Next time frame: " + nextFrameTimeMs);
+                controlled_print("Next will be: ");
+                nextFrameTimeMs = int.Parse(connection.readline());
+                controlled_print("Next time frame: " + nextFrameTimeMs);
                 waitingForNewFrame = false;
             }
             else
             {
                 // Step Loop-1 (as per protocol)
-                if (getMilisecond() - sequenceStartTimeMs > nextFrameTimeMs)
+                if (getMilisecond() >= 0 && getMilisecond() - sequenceStartTimeMs >= nextFrameTimeMs)
                 {
                     // Step Loop-2 (as per protocol)
-                    // Composes the message to send to the python script
-                    string toSend = "";
-                    for (int i = 0; i < movableLimbs.Length; i++)
-                    {
-                        if (i != 0)
-                        {
-                            toSend += " ";
-                        }
-
-                        toSend += movableLimbs[i].transform.eulerAngles.x + " " + rigidBodies[i].angularVelocity.x;
-                    }
+                    string toSend = GetStringLimbData_forThread();
 
                     // Sends data to python script
                     // Step Loop-3 (as per protocol)
-                    // process.StandardInput.WriteLine(getMilisecond() - sequenceStartTimeMs);
-                    // process.StandardInput.Flush();
-                    connection.println((getMilisecond() - sequenceStartTimeMs).ToString());
+                    int current_time_ms = getMilisecond() - sequenceStartTimeMs;
+                    critical_print("LocalTime: " + current_time_ms.ToString() + "       PythonTime:" + nextFrameTimeMs +
+                                   "       Difference:" + (current_time_ms - nextFrameTimeMs).ToString());
+                    connection.println(current_time_ms.ToString());
                     // Step Loop-4 (as per protocol)
-                    // process.StandardInput.WriteLine(toSend);
-                    // process.StandardInput.Flush();
                     connection.println(toSend);
 
                     // Step Loop-5 (as per protocol)
-                    // string nextCommand = stdoutReadLine();
                     string nextCommand = connection.readline();
                     // Step Loop-6 (as per protocol)
                     if (nextCommand.Equals("Reset"))
@@ -194,12 +173,10 @@ public class UserComponent : MonoBehaviour
                     else if (nextCommand.Equals("Next"))
                     {
                         // Obtains and applies torques from python script to the limbs
-                        // string[] stringTorques = stdoutReadLine().Split(' ');
                         string[] stringTorques = connection.readline().Split(' ');
                         for (int i = 0; i < movableLimbs.Length; i++)
                         {
                             torquesToApply[i] = float.Parse(stringTorques[i]);
-                            // rigidBodies[i].AddTorque(new Vector3(float.Parse(stringTorques[i]), 0, 0), ForceMode.Force);
                         }
 
                         waitingForNewFrame = true;
@@ -216,6 +193,9 @@ public class UserComponent : MonoBehaviour
         }
     }
 
+    /*
+     * FixedUpdates refreshes 50 times per second by default
+     */
     private void FixedUpdate()
     {
         // Continuously applies existing torques to the limbs
@@ -223,14 +203,28 @@ public class UserComponent : MonoBehaviour
         {
             rigidBodies[i].AddTorque(new Vector3(torquesToApply[i], 0, 0), ForceMode.Force);
         }
+    }
 
+    /*
+     * Refreshes as fast as the frame rate.
+     */
+    private void Update()
+    {
         if (requestReset == true)
         {
             ResetTrainingSequence();
         }
+
+        if (requestLimbData == true)
+        {
+            GetStringLimbData();
+        }
     }
 
-
+    /*
+     * ResetTrainingSequence
+     * Organizes the reset of the unity hand between the main and logic thread.
+     */
     private void ResetTrainingSequence_forThread()
     {
         requestReset = true;
@@ -244,54 +238,101 @@ public class UserComponent : MonoBehaviour
     {
         resetCount++;
         print("The system is resetting. Reset #" + resetCount);
+
+        // Resets the limb positions
         for (int i = 0; i < movableLimbs.Length; i++)
         {
-            ((GameObject) movableLimbs[i]).transform.eulerAngles.Set(startingAngles[i], 0, 0);
+            // movableLimbs[i].transform.eulerAngles.Set(startingAngles[i], 0, 0);
+            // movableLimbs[i].transform.localRotation = Quaternion.Euler(startingAngles[i], 0f, 0f);
+            movableLimbs[i].transform.localRotation = Quaternion.Euler(startingAngles[i]*57.29577958f, 0f, 0f);
             rigidBodies[i].velocity = Vector3.zero;
             rigidBodies[i].angularVelocity = Vector3.zero;
             torquesToApply[i] = 0;
         }
 
-        sequenceStartTimeMs = getMilisecond();
+        // Resets the "start" of unity's training sequence
+        int sequenceStartTimeMs = -1;
+        while (sequenceStartTimeMs < 0)
+        {
+            sequenceStartTimeMs = getMilisecond();
+            critical_print("Attempted to reset with negative milisecond time.");
+        }
+
         requestReset = false;
     }
 
-    // Returns current time in miliseconds
-    private long getMilisecond()
+    /*
+     * GetStringTorques
+     * Organizes the retrieval of the unity hand angles between the main and logic thread.
+     */
+    private string GetStringLimbData_forThread()
+    {
+        requestLimbData = true;
+        while (requestLimbData != false)
+        {
+            Thread.Sleep(1);
+        }
+
+        return stringLimbData;
+    }
+
+    private void GetStringLimbData()
+    {
+        stringLimbData = "";
+        for (int i = 0; i < movableLimbs.Length; i++)
+        {
+            if (i != 0)
+            {
+                stringLimbData += " ";
+            }
+
+            stringLimbData += movableLimbs[i].transform.eulerAngles.x + " " + rigidBodies[i].angularVelocity.x;
+        }
+
+        requestLimbData = false;
+    }
+
+    /*
+     * getMilisecond
+     * Returns the universal time in miliseconds.
+     */
+    private int getMilisecond()
     {
         return System.DateTime.Now.ToUniversalTime().Millisecond;
     }
 
     private void Ready()
     {
-        // process.StandardInput.WriteLine("Ready");
-        // process.StandardInput.Flush();
         connection.println("Ready");
+    }
+
+    public static void controlled_print(string message)
+    {
+        if (PRINT_TO_CONSOLE == true)
+        {
+            Debug.Log(message);
+        }
+    }
+
+    public static void critical_print(string message)
+    {
+        if (PRINT_CRITICAL == true)
+        {
+            Debug.Log("Critical: " + message);
+        }
+        else
+        {
+            controlled_print(message);
+        }
     }
 
     private void Quit()
     {
         running = false; // Stops the thread loop
-        // print("Stopping the script in 10 seconds...");
-        // System.Threading.Thread.Sleep(10000); // Sleeps for 10 seconds
-        process.StandardInput.Close();
-        process.StandardOutput.Close();
         process.Close();
         connection.stop();
         print("Stopped.");
-        return;
     }
-
-    // private string stdoutReadLine()
-    // {
-    //     while (process.StandardOutput.Peek() == -1)
-    //     {
-    //         print("Waiting... for input from python.");
-    //         System.Threading.Thread.Sleep(5);
-    //     }
-    //
-    //     return process.StandardOutput.ReadLine();
-    // }
 
     private void OnDestroy()
     {
@@ -299,74 +340,112 @@ public class UserComponent : MonoBehaviour
     }
 }
 
-class ClientConnectionHandler
+/*
+ * A client class that connects to a TCP connection server to exchange information with external programs.
+ */
+public class ClientConnectionHandler
 {
-    private TcpClient socket;
-    private Stream socketStream;
+    private TcpClient input_socket;
+    private TcpClient output_socket;
     private string HOST;
-    private int PORT;
+    private int INPUT_PORT;
+    private int OUTPUT_PORT;
     private bool running = true;
-    private string input_buffer = "";
+    private String input_buffer;
     private Thread input_thread;
+    private object lock_object;
 
-    public ClientConnectionHandler(string HOST, int PORT)
+    public ClientConnectionHandler(string HOST, int INPUT_PORT, int OUPUT_PORT)
     {
-        init(HOST, PORT);
+        init(HOST, INPUT_PORT, OUPUT_PORT);
     }
 
     public ClientConnectionHandler()
     {
-        init("127.0.0.1", 5000);
+        init("127.0.0.1", 6000, 5000);
     }
 
-    private void init(string HOST, int PORT)
+    private void init(string HOST, int INPUT_PORT, int OUTPUT_PORT)
     {
         this.HOST = HOST;
-        this.PORT = PORT;
+        this.INPUT_PORT = INPUT_PORT;
+        this.OUTPUT_PORT = OUTPUT_PORT;
 
         // Creates socket
-        this.socket = new TcpClient();
-        this.socket.Connect(HOST, PORT);
-        this.socketStream = socket.GetStream();
+        this.output_socket = new TcpClient();
+        this.output_socket.Connect(HOST, OUTPUT_PORT);
+        this.output_socket.SendTimeout = 15000;
+        Thread.Sleep(500);
+
+        this.input_socket = new TcpClient();
+        this.input_socket.Connect(HOST, INPUT_PORT);
+        this.input_socket.ReceiveTimeout = 15000;
+        Thread.Sleep(500);
+
+        this.input_buffer = "";
+        this.lock_object = new object();
 
         // Creates and starts the input thread
-        this.input_thread = new Thread(this.data_receiver_thread_method);
+        this.input_thread = new Thread(new ThreadStart(data_receiver_thread_method));
         this.input_thread.Start();
     }
 
-    public void data_receiver_thread_method()
+    private void data_receiver_thread_method()
     {
         while (running)
         {
-            this.input_buffer += "" + socketStream.ReadByte().ToString();
-        }
-    }
+            UserComponent.controlled_print("Looking for Python input...");
+            byte[] b = new byte[1024];
+            this.input_socket.GetStream().Read(b, 0, 1024);
 
-    public void print(string message)
-    {
-        byte[] output_message = System.Text.Encoding.UTF8.GetBytes(message);
-        this.socketStream.Write(output_message, 0, output_message.Length);
-        this.socketStream.Flush();
+            UserComponent.controlled_print("Converted: " + System.Text.Encoding.UTF8.GetString(b));
+            String received_string = System.Text.Encoding.UTF8.GetString(b).TrimEnd((char) 0);
+            UserComponent.controlled_print("received_string: " + received_string);
+
+            lock (this.lock_object)
+            {
+                this.input_buffer += received_string;
+
+                UserComponent.controlled_print("Buffer: " + this.input_buffer);
+            }
+
+            Thread.Sleep(5);
+        }
     }
 
     public void println(string message)
     {
-        byte[] output_message = System.Text.Encoding.UTF8.GetBytes(message + "\n");
-        this.socketStream.Write(output_message, 0, output_message.Length);
-        this.socketStream.Flush();
+        byte[] output_message = System.Text.Encoding.UTF8.GetBytes(message + "$");
+        this.output_socket.GetStream().Write(output_message, 0, output_message.Length);
+        Thread.Sleep(5);
     }
 
-    public string readline()
+    public String readline()
     {
+        UserComponent.controlled_print("About to read new line from buffer...");
         while (this.running)
         {
-            string[] message_list = input_buffer.Split('\n');
-            if (message_list.Length > 1)
+            lock (this.lock_object)
             {
-                string message = message_list[0];
-                input_buffer = input_buffer.Substring(message.Length + 1);
-                return message;
+                UserComponent.controlled_print("Waiting for input in buffer... len=" + input_buffer.Length + " " +
+                                               input_buffer);
+
+                if (this.input_buffer.Length > 0)
+                {
+                    String[] message_list = input_buffer.TrimStart(' ').TrimStart('$').TrimStart(' ').Split('$');
+
+                    if (message_list.Length > 1)
+                    {
+                        String message = message_list[0];
+                        input_buffer = input_buffer.TrimStart(' ').TrimStart('$').TrimStart(' ')
+                            .Substring(message.Length + 1);
+                        UserComponent.controlled_print("Returning message: " + message);
+                        return message;
+                    }
+                }
             }
+
+            Thread.Sleep(5);
         }
 
         return null;
@@ -375,7 +454,8 @@ class ClientConnectionHandler
     public void stop()
     {
         this.running = false;
-        socket.Close();
-        this.socketStream.Close();
+        this.input_thread.Abort();
+        input_socket.Close();
+        output_socket.Close();
     }
 }

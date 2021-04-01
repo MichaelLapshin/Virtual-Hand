@@ -1,0 +1,2 @@
+ClientConnectionHandler.py            ModelTrainerV3.py         ServerConnectionHandler.py         Note: TCP connections with one socket per program.
+ClientConnectionHandlerv2.py          ModelTrainerV4.py         ServerConnectionHandlerV2.py       Note: TCP connections with two sockets per program.
