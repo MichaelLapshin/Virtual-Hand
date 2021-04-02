@@ -24,13 +24,13 @@ from typing import Any, List, Sequence, Tuple
 
 from ClientConnectionHandlerV2 import ClientConnectionHandler
 
-sys.stderr = open("PythonClientError_ModelTrainer.txt", "w")
+sys.stderr = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientError_ModelTrainer.txt", "w")
 f = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientLog.txt", 'w')
 f.write(time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()) + "\n")
 f.close()
 sys.stdout = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientLog.txt", 'a')
 
-print_to_logs = False
+print_to_logs = True
 print_critical = True
 
 
@@ -66,7 +66,8 @@ data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\"
 DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
 number_of_sensors = len(data_set.get("sensor"))
 number_of_limbs = len(data_set.get("angle")) * len(data_set.get("angle")[0])
-possible_forces = [-10, 10]
+ANGLE_THRESHOLD_DEGREES = 20 * math.pi / 180.0  # +- 10 degrees from actual angle threshold
+possible_forces = [-0.1, 0.1]
 
 eps = np.finfo(np.float32).eps.item()
 
@@ -212,7 +213,6 @@ input_train_angles = data_set.get("angle")
 """
     Training starts below
 """
-ANGLE_THRESHOLD_DEGREES = 10 * math.pi / 180  # +- 10 degrees from actual angle threshold
 TOTAL_NUMBER_OF_FRAMES = data_set.get("time").len()
 current_frame_number = 0
 
@@ -257,14 +257,16 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
         if input_train_frame_time[current_frame_number] <= unity_frame_time <= input_train_frame_time[
             current_frame_number + 1]:
             passed_time_condition = True
-        # passed_angle_condition = True  # todo, mess around with this
+        passed_time_condition = True  # todo, mess around with this
 
         # Angle condition
         passed_angle_condition = True
+        why_failed = 0
         for i in range(0, len(expected_limb_angles)):
             if expected_limb_angles[i] - ANGLE_THRESHOLD_DEGREES > current_limb_angles[i] \
                     or current_limb_angles[i] > expected_limb_angles[i] + ANGLE_THRESHOLD_DEGREES:
                 passed_angle_condition = False
+                why_failed = i
                 break
 
         # Preparing sensors inputs (obtains the sensor readings for the current frame)
@@ -287,6 +289,15 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
         elif not passed_time_condition or not passed_angle_condition:
             connection_handler.print("Reset")
             failed_episode = True
+
+            critical_print("Triggering reset...")
+            if not passed_time_condition:
+                critical_print("Did not pass time condition.")
+            if not passed_angle_condition:
+                critical_print("Did not pass angle condition. Index: " + str(why_failed) + "  Expected: " + str(
+                    expected_limb_angles[why_failed]) + "  Got: " + str(
+                    current_limb_angles[why_failed]) + "  Difference:" + str(
+                    expected_limb_angles[why_failed] - current_limb_angles[why_failed]))
             break
         else:
             connection_handler.print("Next")
@@ -295,6 +306,7 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
                     - current_limb_angles: unity angles
                     - expected_limb_angles: real angles
             """
+            critical_print("Next is initiated. Frame: " + str(current_frame_number))
 
             # Prepared the torques to send to the unity script
             string_torques = ""

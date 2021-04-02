@@ -10,10 +10,10 @@ import time
 import select
 import sys
 
-sys.stderr = open("PythonClientError_ConnectionHandler.txt", "w")
+sys.stderr = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientError_ConnectionHandler.txt", "w")
 sys.stdout = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientLog.txt", 'a')
 
-print_to_logs = True
+print_to_logs = False
 
 
 def controlled_print(message):
@@ -35,12 +35,16 @@ class ClientConnectionHandler:
         self.OUTPUT_PORT = OUTPUT_PORT
 
         self.output_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # establishes default connection
-        self.output_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
+        # self.output_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
+        self.output_socket.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+        self.output_socket.setblocking(True)
         self.output_socket.connect((self.HOST, self.OUTPUT_PORT))
         time.sleep(0.5)
 
         self.input_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # establishes default connection
-        self.input_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
+        self.output_socket.setblocking(True)
+        self.input_socket.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+        # self.input_socket.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
         self.input_socket.connect((self.HOST, self.INPUT_PORT))
         time.sleep(0.5)
 
@@ -57,7 +61,7 @@ class ClientConnectionHandler:
 
         while self.running:
             # Receives input
-            recv_input = self.input_socket.recv(1024).decode("utf-8")  # todo, make sure it receives newlines
+            recv_input = self.input_socket.recv(256).decode("utf-8")  # todo, make sure it receives newlines
 
             # Locks and modifies the buffer
             self.lock.acquire()
@@ -68,13 +72,13 @@ class ClientConnectionHandler:
 
             self.lock.release()
 
-            time.sleep(0.005)
+            time.sleep(0.001)
 
     def print(self, message):
         message = str(message)
         controlled_print("Sending over to C#: " + message)
         self.output_socket.send((message + "$").encode("utf-8"))
-        time.sleep(0.01)
+        time.sleep(0.001)
 
     def input(self):
         while self.running:
@@ -92,7 +96,7 @@ class ClientConnectionHandler:
             if len(message) > 0:
                 return message
 
-            time.sleep(0.005)
+            time.sleep(0.001)
 
     def stop(self):
         self.running = False

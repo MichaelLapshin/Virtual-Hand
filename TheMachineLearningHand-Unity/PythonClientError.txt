@@ -1,9 +1,0 @@
-Exception in thread Thread-1:
-Traceback (most recent call last):
-  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2288.0_x64__qbz5n2kfra8p0\lib\threading.py", line 932, in _bootstrap_inner
-    self.run()
-  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.8_3.8.2288.0_x64__qbz5n2kfra8p0\lib\threading.py", line 870, in run
-    self._target(*self._args, **self._kwargs)
-  File "C:\Git\Virtual-Hand\PythonScripts\ClientConnectionHandler.py", line 49, in data_receiver_thread_method
-    self.input_buffer += self.s.recv(256).decode("utf-8")  # todo, make sure it receives newlines
-ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host

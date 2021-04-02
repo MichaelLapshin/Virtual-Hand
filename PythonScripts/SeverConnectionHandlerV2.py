@@ -60,7 +60,7 @@ class ClientHandler(threading.Thread):
         while running:
 
             try:
-                recv_input = self.input_connection.recv(1024).decode("utf-8")
+                recv_input = self.input_connection.recv(256).decode("utf-8")
 
                 self.lock.acquire()
                 self.input_client_buffer += recv_input
@@ -74,7 +74,7 @@ class ClientHandler(threading.Thread):
                 print(self.input_connection)
                 print(self.input_client_buffer)
 
-            time.sleep(0.003)
+            time.sleep(0.001)
 
     def get_buffer_line(self):
         self.lock.acquire()
@@ -94,7 +94,7 @@ class ClientHandler(threading.Thread):
 
     def send(self, message):
         self.output_connection.send(message)
-        time.sleep(0.003)
+        time.sleep(0.001)
 
     def get_address(self):
         return self.input_client_address
@@ -118,8 +118,13 @@ def connection_establisher():
         input_connection.settimeout(12.0)
         output_connection.settimeout(12.0)
 
-        input_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
-        output_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
+        input_connection.setblocking(True)
+        output_connection.setblocking(True)
+
+        # input_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
+        # output_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
+        input_connection.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+        output_connection.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
 
         clients.append(ClientHandler(input_connection, input_client_address, output_connection, output_client_address))
         print("Established connection with... in:" + str(input_client_address) + " : out:" + str(output_client_address))
