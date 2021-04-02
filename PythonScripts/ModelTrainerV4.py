@@ -66,8 +66,8 @@ data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\"
 DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
 number_of_sensors = len(data_set.get("sensor"))
 number_of_limbs = len(data_set.get("angle")) * len(data_set.get("angle")[0])
-ANGLE_THRESHOLD_DEGREES = 20 * math.pi / 180.0  # +- 10 degrees from actual angle threshold
-possible_forces = [-0.1, 0.1]
+ANGLE_THRESHOLD_DEGREES = 30 * math.pi / 180.0  # +- 10 degrees from actual angle threshold
+possible_forces = [-0.0005, 0.0005]
 
 eps = np.finfo(np.float32).eps.item()
 
@@ -216,12 +216,14 @@ input_train_angles = data_set.get("angle")
 TOTAL_NUMBER_OF_FRAMES = data_set.get("time").len()
 current_frame_number = 0
 
+checker = 0
+
 while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
     current_frame_number = 0
     failed_episode = False
     for model in models:
         model.reset_episode()
-
+    print("AAAAAAAAAAAAAAAAAAA "+ str(time.time() - checker))
     while not failed_episode:
         is_unity_ready = connection_handler.input()
         if is_unity_ready != "Ready":
@@ -289,7 +291,7 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
         elif not passed_time_condition or not passed_angle_condition:
             connection_handler.print("Reset")
             failed_episode = True
-
+            # time.sleep(1)
             critical_print("Triggering reset...")
             if not passed_time_condition:
                 critical_print("Did not pass time condition.")
@@ -325,8 +327,9 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
             models[m].save("/models/" + model_name + "_index" + m + "_CompletedTraining")
         break
     else:
-        for model in models:
-            model.backpropagate_model()
+        checker = time.time()
+        # for model in models:
+        #     model.backpropagate_model()
 
         if current_frame_number % 30 == 0:  # Saves temporary models every 30 frames (if failed on multiple of 30 frames)
             # for m in range(0, len(models)):

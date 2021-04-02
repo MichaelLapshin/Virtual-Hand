@@ -13,8 +13,8 @@ using System.Windows.Input;
 public class UserComponent : MonoBehaviour
 {
     // Debugging variables
-    public static bool PRINT_TO_CONSOLE = false;
-    public static bool PRINT_CRITICAL = false;
+    public static bool PRINT_TO_CONSOLE = true;
+    public static bool PRINT_CRITICAL = true;
     public static bool MANUAL_CONTROL = false;
 
     // Game variables
@@ -132,6 +132,7 @@ public class UserComponent : MonoBehaviour
             string[] stringBaseAngles = connection.readline().Split(' ');
             for (int i = 0; i < stringBaseAngles.Length; i++)
             {
+                print(stringBaseAngles[i]);
                 startingAngles[i] = float.Parse(stringBaseAngles[i]);
             }
             // startingAngles = new float[movableLimbs.Length]; // todo, remove this
@@ -468,15 +469,15 @@ public class UserComponent : MonoBehaviour
             for (int i = 0; i < limbData.Length; i++)
             {
                 float angle = limbData[i];
-                for (int j = 0; j < 5; j++)  // todo, replace this with something more reliable
+                for (int j = 0; j < 10; j++) // todo, replace this with something more reliable
                 {
                     if (angle > 180)
                     {
-                        angle -= 180;
+                        angle -= 360;
                     }
                     else if (angle < -180)
                     {
-                        angle += 180;
+                        angle += 360;
                     }
                     else
                     {
@@ -546,7 +547,7 @@ public class ClientConnectionHandler
     private string HOST;
     private int INPUT_PORT;
     private int OUTPUT_PORT;
-    private int INPUT_BUFFER_SIZE = 256;
+    private int INPUT_BUFFER_SIZE = 1024;
 
     // Thread-related variables
     private bool running = true;
@@ -575,8 +576,8 @@ public class ClientConnectionHandler
         this.output_socket.Connect(HOST, OUTPUT_PORT);
         this.output_socket.SendTimeout = 15000;
         this.output_socket.Client.NoDelay = true;
-        this.output_socket.NoDelay = true;
         this.output_socket.Client.Blocking = true;
+        this.output_socket.NoDelay = true;
         Thread.Sleep(500);
 
         this.input_socket = new TcpClient();
@@ -604,7 +605,7 @@ public class ClientConnectionHandler
             this.input_socket.GetStream().Read(b, 0, INPUT_BUFFER_SIZE);
 
             UserComponent.controlled_print("Converted: " + System.Text.Encoding.UTF8.GetString(b));
-            String received_string = System.Text.Encoding.UTF8.GetString(b).TrimEnd((char) 0);
+            String received_string = System.Text.Encoding.UTF8.GetString(b).Trim((char) 0);//.Trim('#');
             UserComponent.controlled_print("received_string: " + received_string);
 
             lock (this.lock_object)
@@ -620,7 +621,13 @@ public class ClientConnectionHandler
 
     public void println(string message)
     {
-        byte[] output_message = System.Text.Encoding.UTF8.GetBytes(message + "$");
+        // string blanks = "";
+        // for (int i = 0; i < INPUT_BUFFER_SIZE - message.Length; i++)
+        // {
+        //     blanks += "#";
+        // }
+
+        byte[] output_message = System.Text.Encoding.UTF8.GetBytes(message + "$");//  + blanks);
         this.output_socket.GetStream().Write(output_message, 0, output_message.Length);
         Thread.Sleep(1);
     }
@@ -632,8 +639,8 @@ public class ClientConnectionHandler
         {
             lock (this.lock_object)
             {
-                UserComponent.controlled_print("Waiting for input in buffer... len=" + input_buffer.Length + " " +
-                                               input_buffer);
+                UserComponent.controlled_print("Waiting for input in buffer... len=" + 
+                                               input_buffer.Length + " " + input_buffer);
 
                 if (this.input_buffer.Length > 0)
                 {

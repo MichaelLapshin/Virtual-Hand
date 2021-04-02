@@ -9,7 +9,7 @@ import threading
 import time
 
 # For debugging
-print_to_logs = False
+print_to_logs = True
 
 
 def controlled_print(message):
@@ -60,7 +60,7 @@ class ClientHandler(threading.Thread):
         while running:
 
             try:
-                recv_input = self.input_connection.recv(256).decode("utf-8")
+                recv_input = self.input_connection.recv(1024).decode("utf-8")#.strip("#")
 
                 self.lock.acquire()
                 self.input_client_buffer += recv_input
@@ -93,7 +93,8 @@ class ClientHandler(threading.Thread):
         return None
 
     def send(self, message):
-        self.output_connection.send(message)
+        #blanks = ("#"*(1024-len(message))).encode("utf-8")
+        self.output_connection.send(message)# + blanks)
         time.sleep(0.001)
 
     def get_address(self):
@@ -123,8 +124,17 @@ def connection_establisher():
 
         # input_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
         # output_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
-        input_connection.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
-        output_connection.setsockopt(socket.SOL_TCP, socket.TCP_NODELAY, 1)
+        input_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, True)
+        output_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, True)
+
+        # input_connection.setsockopt(socket.IPPROTO_TCP, socket.SO_SNDBUF, 1)
+        # output_connection.setsockopt(socket.IPPROTO_TCP, socket.SO_SNDBUF, 1)
+
+        # input_connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, False)
+        # output_connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, False)
+
+        # input_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_QUICKACK, False)
+        # output_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_QUICKACK, False)
 
         clients.append(ClientHandler(input_connection, input_client_address, output_connection, output_client_address))
         print("Established connection with... in:" + str(input_client_address) + " : out:" + str(output_client_address))
