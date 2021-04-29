@@ -9,7 +9,7 @@ import threading
 import time
 
 # For debugging
-print_to_logs = True
+print_to_logs = False
 
 
 def controlled_print(message):
@@ -122,19 +122,8 @@ def connection_establisher():
         input_connection.setblocking(True)
         output_connection.setblocking(True)
 
-        # input_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
-        # output_connection.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 20000, 20000))
         input_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, True)
         output_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, True)
-
-        # input_connection.setsockopt(socket.IPPROTO_TCP, socket.SO_SNDBUF, 1)
-        # output_connection.setsockopt(socket.IPPROTO_TCP, socket.SO_SNDBUF, 1)
-
-        # input_connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, False)
-        # output_connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_CORK, False)
-
-        # input_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_QUICKACK, False)
-        # output_connection.setsockopt(socket.SOL_SOCKET, socket.TCP_QUICKACK, False)
 
         clients.append(ClientHandler(input_connection, input_client_address, output_connection, output_client_address))
         print("Established connection with... in:" + str(input_client_address) + " : out:" + str(output_client_address))
@@ -182,7 +171,9 @@ while running:
 
 # Ends the server program
 print("Stopping the server program.")
-time.sleep(0.5)  # todo, change this back to 0.5
+
+time.sleep(0.5)
+
 for client in clients:
     client.stop()
 # input_socket.shutdown(socket.SHUT_RDWR)

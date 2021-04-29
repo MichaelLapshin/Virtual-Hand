@@ -8,8 +8,6 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # To decrease amount of warnings (temporary)
 
-import collections
-import gym
 import numpy as np
 import tensorflow as tf
 import h5py
@@ -17,10 +15,8 @@ import math
 import time
 import sys
 
-from matplotlib import pyplot as plt
 from tensorflow.keras import layers
 from tensorflow import keras
-from typing import Any, List, Sequence, Tuple
 
 from ClientConnectionHandlerV2 import ClientConnectionHandler
 
@@ -63,11 +59,20 @@ critical_print("Received first C# inputs: " + dataset_name + " " + model_name)
 
 # Obtains data
 data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + dataset_name + ".hdf5", 'r')
+DATA_FRAMES_PER_SECOND = 10
 DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
+ms_time_per_data_frame = 1000 / DATA_FRAMES_PER_SECOND
 number_of_sensors = len(data_set.get("sensor"))
 number_of_limbs = len(data_set.get("angle")) * len(data_set.get("angle")[0])
-ANGLE_THRESHOLD_DEGREES = 30 * math.pi / 180.0  # +- 10 degrees from actual angle threshold
-possible_forces = [-0.0005, 0.0005]
+ANGLE_THRESHOLD_RADIANS = 10 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
+
+possible_forces = [-0.008, -0.0004, -0.0001, 0.0, 0.0001, 0.0004, 0.008]
+# possible_forces = [0, 0, 0]
+
+# For a given limb, the following are constants that contribute to its reward
+REWARD_MAX_GAIN = 10
+REWARD_HIGH_GAIN = 5
+REWARD_OTHER_GAIN = 1
 
 eps = np.finfo(np.float32).eps.item()
 
@@ -75,7 +80,8 @@ eps = np.finfo(np.float32).eps.item()
 # Actor definition
 class CustomModel:
     # Training variables
-    optimizer = keras.optimizers.Adam(learning_rate=0.01)
+    # optimizer = keras.optimizers.Adam(learning_rate=0.01)
+    optimizer = keras.optimizers.Adam(learning_rate=0.1)
     huber_loss = keras.losses.Huber()
     action_probs_history = []
     critic_value_history = []
@@ -85,16 +91,20 @@ class CustomModel:
 
     current_action_index = None
 
+    NUM_ACTIONS = 0
+
     def __init__(self, gamma=0.99):
         self.gamma = gamma
 
+        self.NUM_ACTIONS = len(possible_forces)
+
         # Creates the model for the agent
         inputs = layers.Input(shape=(35,))
-        common = layers.Dense(64, activation="relu",
+        common = layers.Dense(35, activation="relu",
                               kernel_initializer=keras.initializers.zeros,
                               bias_initializer=keras.initializers.Zeros()
                               )(inputs)
-        action = layers.Dense(2, activation="softmax",
+        action = layers.Dense(self.NUM_ACTIONS, activation="softmax",
                               kernel_initializer=keras.initializers.zeros,
                               bias_initializer=keras.initializers.Zeros()
                               )(common)
@@ -115,7 +125,7 @@ class CustomModel:
             self.critic_value_history.append(critic_value[0, 0])
 
             # Sample action from action probability distribution
-            action = np.random.choice(2, p=np.squeeze(action_probs))  # todo, change "2" to num_actions variable later
+            action = np.random.choice(self.NUM_ACTIONS, p=np.squeeze(action_probs))
             self.action_probs_history.append(tf.math.log(action_probs[0, action]))
 
             self.rewards_history.append(reward)
@@ -129,7 +139,7 @@ class CustomModel:
         with self.tape as tape:
             returns = []
             discounted_sum = 0
-            for r in self.rewards_history[::-1]:
+            for r in self.rewards_history[::-1]:  # TODO, fix here?
                 discounted_sum = r + self.gamma * discounted_sum
                 returns.insert(0, discounted_sum)
 
@@ -163,12 +173,34 @@ class CustomModel:
 
         self.optimizer.apply_gradients(zip(grads, self.model.trainable_variables))
 
-    def compute_reward(self, unity_angle, expected_angle):
+    def r2d(self, radians):  # radian to degrees conversion
+        return radians * 180 / math.pi
+
+    def individual_angle_reward(self, unity_angle, expected_angle):
         # This reward gives a "flat" reward when the difference approaches 0,
-        # but a very negative beyond the ANGLE_THRESHOLD_DEGREES
-        return max(-1000.0,
-                   -math.pow(expected_angle - unity_angle, 4) / 100.0
-                   + math.pow(ANGLE_THRESHOLD_DEGREES, 4) / 200.0) / 1000.0
+        # but a very negative beyond the ANGLE_THRESHOLD_RADIANS
+        # return max(-100.0,
+        #            -math.pow(self.r2d(expected_angle - unity_angle), 4) / 100.0
+        #            + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 4) / 100.0) / 1000.0
+        return max(-math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2),
+                   -math.pow(self.r2d(expected_angle - unity_angle), 2) / 3.0
+                   + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
+
+    def compute_reward(self, unity_angles, expected_angles,
+                       max_reward_indices,
+                       high_reward_indices=[],
+                       other_reward_indices=[]):
+
+        # Computes the reward for a limb based on all of the listed related limbs
+        limb_reward = 0
+        for r in max_reward_indices:
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r]) * REWARD_MAX_GAIN
+        for r in high_reward_indices:
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r]) * REWARD_HIGH_GAIN
+        for r in other_reward_indices:
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r]) * REWARD_OTHER_GAIN
+
+        return limb_reward
 
     def reset_episode(self):
         with self.tape as tape:
@@ -214,27 +246,32 @@ input_train_angles = data_set.get("angle")
     Training starts below
 """
 TOTAL_NUMBER_OF_FRAMES = data_set.get("time").len()
-current_frame_number = 0
+# current_frame_number = 0
+latest_unity_time = 0
 
-checker = 0
+# while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
+while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
+    # current_frame_number = 0
+    latest_unity_time = 0
 
-while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
-    current_frame_number = 0
     failed_episode = False
     for model in models:
         model.reset_episode()
-    print("AAAAAAAAAAAAAAAAAAA "+ str(time.time() - checker))
+
+    connection_handler.print("Ready")
+
     while not failed_episode:
         is_unity_ready = connection_handler.input()
         if is_unity_ready != "Ready":
             connection_handler.print(
                 "ERROR. C# Unity Script sent improper command. 'Ready' not received. Received " + is_unity_ready + " instead.")
 
-        connection_handler.print(data_set.get("time")[current_frame_number])
-        critical_print(data_set.get("time")[current_frame_number])
-
         # Receives frame capture time from unity
-        unity_frame_time = int(connection_handler.input())
+        latest_unity_time = int(connection_handler.input())
+        latest_frame_index = int(latest_unity_time / ms_time_per_data_frame)
+
+        # connection_handler.print(data_set.get("time")[current_frame_number]) # todo, removed because reactive model
+        critical_print("unity time: " + str(latest_unity_time) + "    index conversion: " + str(latest_frame_index))
 
         # Obtains limb data from the C# Unity script
         string_limb_data = connection_handler.input().rstrip(" $").split(" ")
@@ -246,7 +283,7 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
         expected_limb_angles = []
         for finger_index in range(0, 5):
             for limb_index in range(0, 3):
-                expected_limb_angles.append(data_set.get("angle")[finger_index][limb_index][current_frame_number])
+                expected_limb_angles.append(data_set.get("angle")[finger_index][limb_index][latest_frame_index])
 
         # Extracts angles from unity model for comparison
         current_limb_angles = limb_data[::DATA_PER_LIMB]
@@ -254,26 +291,25 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
         # Assert that expected and limb data is of the same length
         assert len(current_limb_angles) == len(expected_limb_angles)
 
-        # Time condition
-        passed_time_condition = False
-        if input_train_frame_time[current_frame_number] <= unity_frame_time <= input_train_frame_time[
-            current_frame_number + 1]:
-            passed_time_condition = True
-        passed_time_condition = True  # todo, mess around with this
+        # Time condition // todo, no more time condition because of reactive approach
+        # passed_time_condition = False
+        # if input_train_frame_time[current_frame_number] <= unity_frame_time <= input_train_frame_time[
+        #     current_frame_number + 1]:
+        #     passed_time_condition = True
+        # passed_time_condition = True  # todo, mess around with this
 
         # Angle condition
         passed_angle_condition = True
         why_failed = 0
         for i in range(0, len(expected_limb_angles)):
-            if expected_limb_angles[i] - ANGLE_THRESHOLD_DEGREES > current_limb_angles[i] \
-                    or current_limb_angles[i] > expected_limb_angles[i] + ANGLE_THRESHOLD_DEGREES:
+            if expected_limb_angles[i] - ANGLE_THRESHOLD_RADIANS > current_limb_angles[i] \
+                    or current_limb_angles[i] > expected_limb_angles[i] + ANGLE_THRESHOLD_RADIANS:
                 passed_angle_condition = False
                 why_failed = i
                 break
 
         # Preparing sensors inputs (obtains the sensor readings for the current frame)
-        current_sensor_readings = [input_train_sensors[i][current_frame_number]
-                                   for i in range(0, number_of_sensors)]
+        current_sensor_readings = [input_train_sensors[i][latest_frame_index] for i in range(0, number_of_sensors)]
 
         # Preparing the model inputs (Gathers the data + converts to tuple)
         current_state = (np.array(limb_data + current_sensor_readings))
@@ -281,25 +317,39 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
         next_torques = []
         for m in range(0, len(models)):
             model = models[m]
-            reward = model.compute_reward(current_limb_angles[m], expected_limb_angles[m])
+
+            max_list = [m]
+            high_list = [int(m / 3) * 3, int(m / 3) * 3 + 1, int(m / 3) * 3 + 2]
+            high_list.remove(m)
+
+            reward = model.compute_reward(current_limb_angles, expected_limb_angles,
+                                          max_list,
+                                          high_list,
+                                          [])  # TODO, add more dependencies
+            if latest_frame_index <= 0:
+                reward = 0
+
             next_torques.append(possible_forces[model.step(state=current_state, reward=reward)])
+            critical_print("REWARD: " + str(reward))
 
         # Loop-3 condition
-        if current_frame_number >= TOTAL_NUMBER_OF_FRAMES:
+        if latest_unity_time >= TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
+            # if current_frame_number >= TOTAL_NUMBER_OF_FRAMES:
             connection_handler.print("Quit")
             break
-        elif not passed_time_condition or not passed_angle_condition:
+        elif not passed_angle_condition:
+            # elif not passed_time_condition or not passed_angle_condition:
             connection_handler.print("Reset")
             failed_episode = True
-            # time.sleep(1)
-            critical_print("Triggering reset...")
-            if not passed_time_condition:
-                critical_print("Did not pass time condition.")
-            if not passed_angle_condition:
-                critical_print("Did not pass angle condition. Index: " + str(why_failed) + "  Expected: " + str(
-                    expected_limb_angles[why_failed]) + "  Got: " + str(
-                    current_limb_angles[why_failed]) + "  Difference:" + str(
-                    expected_limb_angles[why_failed] - current_limb_angles[why_failed]))
+            critical_print("Triggering reset... Did not pass time condition.")
+            # if not passed_time_condition:
+            #     critical_print("Did not pass time condition.")
+            # if not passed_angle_condition:
+
+            critical_print("Did not pass angle condition. Index: " + str(why_failed) + "  Expected: " + str(
+                expected_limb_angles[why_failed]) + "  Got: " + str(
+                current_limb_angles[why_failed]) + "  Difference:" + str(
+                expected_limb_angles[why_failed] - current_limb_angles[why_failed]))
             break
         else:
             connection_handler.print("Next")
@@ -308,7 +358,7 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
                     - current_limb_angles: unity angles
                     - expected_limb_angles: real angles
             """
-            critical_print("Next is initiated. Frame: " + str(current_frame_number))
+            critical_print("Next is initiated. Frame: " + str(latest_frame_index))
 
             # Prepared the torques to send to the unity script
             string_torques = ""
@@ -320,18 +370,21 @@ while current_frame_number != TOTAL_NUMBER_OF_FRAMES:
             connection_handler.print(string_torques)
 
             # Increments the frame number for the next loop
-            current_frame_number += 1
+            # current_frame_number += 1
 
     if not failed_episode:
         for m in range(0, len(models)):
             models[m].save("/models/" + model_name + "_index" + m + "_CompletedTraining")
         break
     else:
-        checker = time.time()
-        # for model in models:
-        #     model.backpropagate_model()
 
-        if current_frame_number % 30 == 0:  # Saves temporary models every 30 frames (if failed on multiple of 30 frames)
-            # for m in range(0, len(models)):
-            # models[m].save("/models/" + model_name + "_index" + str(m) + "_frame" + str(current_frame_number))
-            pass
+        if latest_frame_index > 0:  # If statement is added in order not to backpropagate with starting angles
+            for model in models:
+                model.backpropagate_model()  # TODO, don't forget to include this
+
+        # if current_frame_number % 50 == 0:  # Saves temporary models every 30 frames (if failed on multiple of 30 frames)
+        # for m in range(0, len(models)):
+        # models[m].save("/models/" + model_name + "_index" + str(m) + "_frame" + str(current_frame_number))
+        # pass
+
+critical_print("EVERYTHING IS DONE! CONGRATS (or not if its actually broken)!")

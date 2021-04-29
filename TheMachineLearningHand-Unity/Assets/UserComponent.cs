@@ -13,7 +13,7 @@ using System.Windows.Input;
 public class UserComponent : MonoBehaviour
 {
     // Debugging variables
-    public static bool PRINT_TO_CONSOLE = true;
+    public static bool PRINT_TO_CONSOLE = false;
     public static bool PRINT_CRITICAL = true;
     public static bool MANUAL_CONTROL = false;
 
@@ -37,13 +37,15 @@ public class UserComponent : MonoBehaviour
     private Stopwatch stopwatch = null;
 
     private bool zeroPosition = true;
+
+    private int positionSetupResets = 300;
     // private bool requestLimbData = false;
     // private string stringLimbData = "";
 
     // Hands-on training variables
     private int resetCount = 0;
-    private long nextFrameTimeMs = 0;
-    private bool waitingForNewFrame;
+    // private long nextFrameTimeMs = 0;
+    // private bool waitingForNewFrame;
 
     // Start is called before the first frame update
     void Start()
@@ -144,15 +146,30 @@ public class UserComponent : MonoBehaviour
             }
 
             controlled_print("Python angles obtained: " + stringBaseAngles.ToString());
-
-            // while (true) // todo, remove this
-            // {
-            //     ResetTrainingSequence_forThread();
-            // }
-
-            waitingForNewFrame = true;
-            ResetTrainingSequence_forThread();
+            
+            // waitingForNewFrame = true;
+            ResetTrainingSequence_forThread(true);
             Ready();
+        }
+
+        // Resets the system multiple times to achieve stable start position
+        while (positionSetupResets > 0)
+        {
+            if (positionSetupResets % 100 == 0)
+            {
+                critical_print("Positional resets remaining: " + positionSetupResets.ToString());
+            }
+
+            zeroPosition = true;
+            ResetTrainingSequence_forThread(false);
+            positionSetupResets = positionSetupResets - 1;
+        }
+
+        // Initial ready (other ready's are received upon restart)
+        if (connection.readline().Equals("Ready") == false)
+        {
+            critical_print("False start! (did not receive loop ready)");
+            Quit();
         }
 
         /*
@@ -162,66 +179,67 @@ public class UserComponent : MonoBehaviour
         {
             // Step Loop-0 (as per Pprotocol)
             // controlled_print("Stopwatch: " + stopwatch.ElapsedMilliseconds.ToString());
-            if (waitingForNewFrame == true)
+            // if (waitingForNewFrame == true)
+            // {
+            // controlled_print("Next will be: ");
+            // nextFrameTimeMs = long.Parse(connection.readline());
+            // controlled_print("Next time frame: " + nextFrameTimeMs);
+            // waitingForNewFrame = false;
+            // }
+            // else if (stopwatch.ElapsedMilliseconds >= nextFrameTimeMs) // Step Loop-1 (as per protocol)
+            // {
+            // Step Loop-2 (as per protocol)
+            string toSend = GetStringLimbData_forThread();
+
+            // Sends data to python script
+            // Step Loop-3 (as per protocol)
+            long current_time_ms = stopwatch.ElapsedMilliseconds;
+            connection.println(current_time_ms.ToString());
+
+            critical_print("Current time: " + current_time_ms.ToString());
+
+            // Step Loop-4 (as per protocol)
+            connection.println(toSend);
+
+            // Step Loop-5 (as per protocol)
+            string nextCommand = connection.readline();
+            // Step Loop-6 (as per protocol)
+            if (nextCommand.Equals("Reset"))
             {
-                controlled_print("Next will be: ");
-                nextFrameTimeMs = long.Parse(connection.readline());
-                controlled_print("Next time frame: " + nextFrameTimeMs);
-                waitingForNewFrame = false;
+                if(connection.readline().Equals("Ready"))
+                ResetTrainingSequence_forThread(true);
+                Ready();
             }
-            else if (stopwatch.ElapsedMilliseconds >= nextFrameTimeMs) // Step Loop-1 (as per protocol)
+            else if (nextCommand.Equals("Quit"))
             {
-                // Step Loop-2 (as per protocol)
-                string toSend = GetStringLimbData_forThread();
+                Quit();
+            }
+            else if (nextCommand.Equals("Next"))
+            {
+                // Obtains and applies torques from python script to the limbs
+                Debug.Log("GOT NEXT");
+                string[] stringTorques = connection.readline().Split(' ');
+                controlled_print("Received Torques length: " + stringTorques.Length.ToString());
 
-                // Sends data to python script
-                // Step Loop-3 (as per protocol)
-                long current_time_ms = stopwatch.ElapsedMilliseconds;
-                critical_print("LocalTime: " + current_time_ms.ToString() + "       PythonTime:" + nextFrameTimeMs +
-                               "       Difference:" + (current_time_ms - nextFrameTimeMs).ToString());
-                connection.println(current_time_ms.ToString());
-                // Step Loop-4 (as per protocol)
-                connection.println(toSend);
-
-                // Step Loop-5 (as per protocol)
-                string nextCommand = connection.readline();
-                // Step Loop-6 (as per protocol)
-                if (nextCommand.Equals("Reset"))
+                lock (torquesToApply_locker)
                 {
-                    ResetTrainingSequence_forThread();
-
-                    waitingForNewFrame = true;
-                    Ready();
-                }
-                else if (nextCommand.Equals("Quit"))
-                {
-                    Quit();
-                }
-                else if (nextCommand.Equals("Next"))
-                {
-                    // Obtains and applies torques from python script to the limbs
-                    Debug.Log("GOT NEXT");
-                    string[] stringTorques = connection.readline().Split(' ');
-                    controlled_print("Received Torques length: " + stringTorques.Length.ToString());
-
-                    lock (torquesToApply_locker)
+                    for (int i = 0; i < movableLimbs.Length; i++)
                     {
-                        for (int i = 0; i < movableLimbs.Length; i++)
-                        {
-                            torquesToApply[i] = float.Parse(stringTorques[i]);
-                        }
+                        torquesToApply[i] = float.Parse(stringTorques[i]);
                     }
+                }
 
-                    waitingForNewFrame = true;
-                    Ready();
-                }
-                else
-                {
-                    print(
-                        "Unknown nextCommand sent from python script (" + nextCommand + "). Aborting program.");
-                    Quit();
-                }
+                // waitingForNewFrame = true;
+                Ready();
             }
+            else
+            {
+                print(
+                    "Unknown nextCommand sent from python script (" + nextCommand + "). Aborting program.");
+                Quit();
+            }
+
+            // }
         }
     }
 
@@ -231,7 +249,6 @@ public class UserComponent : MonoBehaviour
     private void FixedUpdate()
     {
         // Continuously applies existing torques to the limbs
-
         lock (torquesToApply_locker)
         {
             for (int i = 0; i < movableLimbs.Length; i++)
@@ -383,21 +400,19 @@ public class UserComponent : MonoBehaviour
                 limbData[i * 2 + 1] = rigidBodies[i].angularVelocity.x;
             }
         }
-
-        // if (requestLimbData == true)
-        // {
-        //     GetStringLimbData();
-        // }
     }
 
     /*
      * ResetTrainingSequence
      * Organizes the reset of the unity hand between the main and logic thread.
      */
-    private void ResetTrainingSequence_forThread()
+    private void ResetTrainingSequence_forThread(bool countReset)
     {
-        resetCount++;
-        critical_print("The system is resetting. Reset #" + resetCount);
+        if (countReset == true)
+        {
+            resetCount++;
+            critical_print("The system is resetting. Reset #" + resetCount);
+        }
 
         requestReset = true;
         while (requestReset != false) // Waits until the main thread resets the hand
@@ -456,13 +471,6 @@ public class UserComponent : MonoBehaviour
      */
     private string GetStringLimbData_forThread()
     {
-        // requestLimbData = true;
-        // while (requestLimbData != false)
-        // {
-        //     Thread.Sleep(1);
-        // }
-        //
-        // return stringLimbData;
         string stringLimbData = "";
         lock (limbData_locker)
         {
@@ -605,7 +613,7 @@ public class ClientConnectionHandler
             this.input_socket.GetStream().Read(b, 0, INPUT_BUFFER_SIZE);
 
             UserComponent.controlled_print("Converted: " + System.Text.Encoding.UTF8.GetString(b));
-            String received_string = System.Text.Encoding.UTF8.GetString(b).Trim((char) 0);//.Trim('#');
+            String received_string = System.Text.Encoding.UTF8.GetString(b).Trim((char) 0); //.Trim('#');
             UserComponent.controlled_print("received_string: " + received_string);
 
             lock (this.lock_object)
@@ -627,7 +635,7 @@ public class ClientConnectionHandler
         //     blanks += "#";
         // }
 
-        byte[] output_message = System.Text.Encoding.UTF8.GetBytes(message + "$");//  + blanks);
+        byte[] output_message = System.Text.Encoding.UTF8.GetBytes(message + "$"); //  + blanks);
         this.output_socket.GetStream().Write(output_message, 0, output_message.Length);
         Thread.Sleep(1);
     }
@@ -639,7 +647,7 @@ public class ClientConnectionHandler
         {
             lock (this.lock_object)
             {
-                UserComponent.controlled_print("Waiting for input in buffer... len=" + 
+                UserComponent.controlled_print("Waiting for input in buffer... len=" +
                                                input_buffer.Length + " " + input_buffer);
 
                 if (this.input_buffer.Length > 0)
@@ -657,7 +665,7 @@ public class ClientConnectionHandler
                 }
             }
 
-            Thread.Sleep(3);
+            Thread.Sleep(1);
         }
 
         return null;
