@@ -62,17 +62,24 @@ data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\"
 DATA_FRAMES_PER_SECOND = 10
 DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
 ms_time_per_data_frame = 1000 / DATA_FRAMES_PER_SECOND
-number_of_sensors = len(data_set.get("sensor"))
-number_of_limbs = len(data_set.get("angle")) * len(data_set.get("angle")[0])
+NUMBER_OF_SENSORS = len(data_set.get("sensor"))
+NUMBER_OF_LIMBS = len(data_set.get("angle")) * len(data_set.get("angle")[0])
 ANGLE_THRESHOLD_RADIANS = 10 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
+MAX_REWARD_ANGLE_DIF_RADIANS = 8 * math.pi / 180.0  # the distance off-perfect which is given max reward
 
-possible_forces = [-0.008, -0.0004, -0.0001, 0.0, 0.0001, 0.0004, 0.008]
-# possible_forces = [0, 0, 0]
+# possible_forces = [-0.0128, -0.0064, -0.0032, -0.0016, -0.0008, -0.0004, -0.0002, -0.0001,
+#                    0.0,
+#                    0.0001, 0.0002, 0.0004, 0.0008, 0.0016, 0.0032, 0.0064, 0.0128]
+possible_forces = [-20,
+                   0.0]
 
 # For a given limb, the following are constants that contribute to its reward
-REWARD_MAX_GAIN = 10
-REWARD_HIGH_GAIN = 5
+REWARD_MAX_GAIN = 100
+REWARD_HIGH_GAIN = 30
 REWARD_OTHER_GAIN = 1
+
+MAX_CONSECUTIVE_FAILED_FRAMES = 4
+failed_frame_count = 0
 
 eps = np.finfo(np.float32).eps.item()
 
@@ -81,7 +88,7 @@ eps = np.finfo(np.float32).eps.item()
 class CustomModel:
     # Training variables
     # optimizer = keras.optimizers.Adam(learning_rate=0.01)
-    optimizer = keras.optimizers.Adam(learning_rate=0.1)
+    optimizer = keras.optimizers.Adam(learning_rate=10)
     huber_loss = keras.losses.Huber()
     action_probs_history = []
     critic_value_history = []
@@ -99,18 +106,22 @@ class CustomModel:
         self.NUM_ACTIONS = len(possible_forces)
 
         # Creates the model for the agent
-        inputs = layers.Input(shape=(35,))
-        common = layers.Dense(35, activation="relu",
+        inputs = layers.Input(shape=(50,))  # todo, change back?
+        dense = layers.Dense(64, activation="relu",
                               kernel_initializer=keras.initializers.zeros,
                               bias_initializer=keras.initializers.Zeros()
                               )(inputs)
+        common = layers.Dense(64, activation="relu",
+                              kernel_initializer=keras.initializers.zeros,
+                              bias_initializer=keras.initializers.Zeros()
+                              )(dense)
         action = layers.Dense(self.NUM_ACTIONS, activation="softmax",
                               kernel_initializer=keras.initializers.zeros,
                               bias_initializer=keras.initializers.Zeros()
                               )(common)
         critic = layers.Dense(1, kernel_initializer=keras.initializers.zeros,
                               bias_initializer=keras.initializers.Zeros()
-                              )(common)
+                              )(common) # Todo, switch back to common?
         self.model = keras.Model(inputs=inputs, outputs=[action, critic])
 
         self.tape = tf.GradientTape()
@@ -139,6 +150,7 @@ class CustomModel:
         with self.tape as tape:
             returns = []
             discounted_sum = 0
+            # for r in self.rewards_history[1::-1]:  # TODO, fix here?
             for r in self.rewards_history[::-1]:  # TODO, fix here?
                 discounted_sum = r + self.gamma * discounted_sum
                 returns.insert(0, discounted_sum)
@@ -179,12 +191,16 @@ class CustomModel:
     def individual_angle_reward(self, unity_angle, expected_angle):
         # This reward gives a "flat" reward when the difference approaches 0,
         # but a very negative beyond the ANGLE_THRESHOLD_RADIANS
-        # return max(-100.0,
-        #            -math.pow(self.r2d(expected_angle - unity_angle), 4) / 100.0
-        #            + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 4) / 100.0) / 1000.0
-        return max(-math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2),
-                   -math.pow(self.r2d(expected_angle - unity_angle), 2) / 3.0
-                   + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
+
+        if math.fabs(expected_angle - unity_angle) <= MAX_REWARD_ANGLE_DIF_RADIANS:
+            return math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2)
+        else:
+            return max(-math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2)*5,
+                       -math.pow(self.r2d(expected_angle - unity_angle), 2)
+                       + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
+            # return max(0.0,
+            #            -math.pow(self.r2d(expected_angle - unity_angle), 2)
+            #            + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
 
     def compute_reward(self, unity_angles, expected_angles,
                        max_reward_indices,
@@ -215,9 +231,9 @@ class CustomModel:
 
 # Creates the models
 models = []
-number_of_inputs = number_of_sensors + number_of_limbs * DATA_PER_LIMB
-for i in range(0, number_of_limbs):
-    models.append(CustomModel())
+NUMBER_OF_INPUTS = NUMBER_OF_SENSORS + NUMBER_OF_LIMBS * DATA_PER_LIMB
+for i in range(0, NUMBER_OF_LIMBS):
+    models.append(CustomModel(gamma=0.20))
 
 """
     Exchanges data between data reference file and Unity
@@ -259,6 +275,8 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
         model.reset_episode()
 
     connection_handler.print("Ready")
+    failed_frame_count = 0
+    next_torques = [0 for i in range(0, NUMBER_OF_LIMBS)]
 
     while not failed_episode:
         is_unity_ready = connection_handler.input()
@@ -285,6 +303,14 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
             for limb_index in range(0, 3):
                 expected_limb_angles.append(data_set.get("angle")[finger_index][limb_index][latest_frame_index])
 
+        # Sends the expected angles to the C# script for display
+        stringExpectedAngles = ""
+        for a in expected_limb_angles:
+            stringExpectedAngles += " " + str(a)
+        stringExpectedAngles = stringExpectedAngles.rstrip(' ')
+
+        connection_handler.print(stringExpectedAngles)
+
         # Extracts angles from unity model for comparison
         current_limb_angles = limb_data[::DATA_PER_LIMB]
 
@@ -306,19 +332,32 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
                     or current_limb_angles[i] > expected_limb_angles[i] + ANGLE_THRESHOLD_RADIANS:
                 passed_angle_condition = False
                 why_failed = i
-                break
+                # break # TODO, revert back?
+        # passed_angle_condition = True # TODO, REMOVE THIS WHEN DONE DEBUGGING
+        if passed_angle_condition == False:
+            failed_frame_count += 1
+        else:
+            failed_frame_count = 0
 
         # Preparing sensors inputs (obtains the sensor readings for the current frame)
-        current_sensor_readings = [input_train_sensors[i][latest_frame_index] for i in range(0, number_of_sensors)]
+        current_sensor_readings = [input_train_sensors[i][latest_frame_index] for i in range(0, NUMBER_OF_SENSORS)]
 
         # Preparing the model inputs (Gathers the data + converts to tuple)
-        current_state = (np.array(limb_data + current_sensor_readings))
+        # previous_state = current_state  # todo, new variable used to "shift" the reward-state assignment
+        current_state = (np.array(limb_data + current_sensor_readings + next_torques))
+
+        # if previous_state is None:
+        #     previous_state = current_state
 
         next_torques = []
         for m in range(0, len(models)):
             model = models[m]
 
+            # if previous_state is None:
+            #     next_torques.append([0])
+            # else:
             max_list = [m]
+            # high_list = []
             high_list = [int(m / 3) * 3, int(m / 3) * 3 + 1, int(m / 3) * 3 + 2]
             high_list.remove(m)
 
@@ -329,6 +368,9 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
             if latest_frame_index <= 0:
                 reward = 0
 
+            # reward = 1
+
+            # next_torques.append(possible_forces[model.step(state=previous_state, reward=reward)])
             next_torques.append(possible_forces[model.step(state=current_state, reward=reward)])
             critical_print("REWARD: " + str(reward))
 
@@ -337,7 +379,7 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
             # if current_frame_number >= TOTAL_NUMBER_OF_FRAMES:
             connection_handler.print("Quit")
             break
-        elif not passed_angle_condition:
+        elif failed_frame_count >= MAX_CONSECUTIVE_FAILED_FRAMES:
             # elif not passed_time_condition or not passed_angle_condition:
             connection_handler.print("Reset")
             failed_episode = True
@@ -362,7 +404,7 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
 
             # Prepared the torques to send to the unity script
             string_torques = ""
-            for i in range(0, number_of_limbs):
+            for i in range(0, NUMBER_OF_LIMBS):
                 string_torques += str(next_torques[i]) + " "
             string_torques = string_torques.rstrip(" ")
 

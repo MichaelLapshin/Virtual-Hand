@@ -16,6 +16,7 @@ public class UserComponent : MonoBehaviour
     public static bool PRINT_TO_CONSOLE = false;
     public static bool PRINT_CRITICAL = true;
     public static bool MANUAL_CONTROL = false;
+    public static float[] expectedAngles;
 
     // Game variables
     private UnityEngine.GameObject[] movableLimbs;
@@ -52,22 +53,28 @@ public class UserComponent : MonoBehaviour
     {
         // Object fetching related logic
         HingeJoint[]
-            hingeObjects =
+            allHingeObjects =
                 FindObjectsOfType(
                     typeof(HingeJoint)) as HingeJoint[]; // Should return all the finger limbs (since they have joints)
-        var sortedHingeJoints = hingeObjects.OrderBy(go => go.name).ToList();
+        var sortedAllHingeJoints = allHingeObjects.OrderBy(go => go.name).ToList();
+
+        var sortedHingeJoints = new ArrayList();
+        foreach (var hinge in sortedAllHingeJoints)
+        {
+            if (isAncestor(hinge.transform, "Hand") == true)
+            {
+                sortedHingeJoints.Add(hinge);
+            }
+        }
 
         movableLimbs = new GameObject[sortedHingeJoints.Count];
         rigidBodies = new Rigidbody[movableLimbs.Length];
-        // string names = "";
-        for (int i = 0; i < hingeObjects.Length; i++)
-        {
-            movableLimbs[i] = sortedHingeJoints[i].gameObject;
-            rigidBodies[i] = ((GameObject) movableLimbs[i]).GetComponent(typeof(Rigidbody)) as Rigidbody;
-            // names += movableLimbs[i].name + " ";
-        }
 
-        // Debug.Log("Names: " + names);
+        for (int i = 0; i < sortedHingeJoints.Count; i++)
+        {
+            movableLimbs[i] = ((HingeJoint) sortedHingeJoints[i]).gameObject;
+            rigidBodies[i] = ((GameObject) movableLimbs[i]).GetComponent(typeof(Rigidbody)) as Rigidbody;
+        }
 
         startingAngles = new float[movableLimbs.Length];
         startingPositions = new Vector3[movableLimbs.Length];
@@ -83,6 +90,9 @@ public class UserComponent : MonoBehaviour
         }
 
         print("Finished the basic initializations of the program.");
+
+        // Initializations for the frame viewer
+        expectedAngles = new float[movableLimbs.Length];
     }
 
     private void RunTrainingThread()
@@ -131,22 +141,25 @@ public class UserComponent : MonoBehaviour
 
             // Obtains starting angles from the python script
             print("Reading start angles...");
-            string[] stringBaseAngles = connection.readline().Split(' ');
-            for (int i = 0; i < stringBaseAngles.Length; i++)
-            {
-                print(stringBaseAngles[i]);
-                startingAngles[i] = float.Parse(stringBaseAngles[i]);
-            }
+            // string[] stringBaseAngles = connection.readline().Split(' ');
+            // for (int i = 0; i < stringBaseAngles.Length; i++)
+            // {
+            //     print(stringBaseAngles[i]);
+            //     startingAngles[i] = float.Parse(stringBaseAngles[i]);
+            // }
+
+            startingAngles = string2floatArray(connection.readline());
+
             // startingAngles = new float[movableLimbs.Length]; // todo, remove this
 
             print("Expecting start angles...");
-            foreach (var angle in stringBaseAngles)
+            foreach (var angle in startingAngles)
             {
-                controlled_print(angle);
+                controlled_print(angle.ToString());
             }
 
-            controlled_print("Python angles obtained: " + stringBaseAngles.ToString());
-            
+            controlled_print("Python angles obtained: " + startingAngles.ToString());
+
             // waitingForNewFrame = true;
             ResetTrainingSequence_forThread(true);
             Ready();
@@ -201,13 +214,26 @@ public class UserComponent : MonoBehaviour
             // Step Loop-4 (as per protocol)
             connection.println(toSend);
 
+            expectedAngles =
+                string2floatArray(connection.readline()); // Obtains the expected angles from the Python Script
+
             // Step Loop-5 (as per protocol)
             string nextCommand = connection.readline();
             // Step Loop-6 (as per protocol)
             if (nextCommand.Equals("Reset"))
             {
-                if(connection.readline().Equals("Ready"))
-                ResetTrainingSequence_forThread(true);
+
+                if (FrameViewer.earlyReset == true)
+                {
+                    ResetTrainingSequence_forThread(true);
+                }
+
+                if (connection.readline().Equals("Ready"))
+                    ResetTrainingSequence_forThread(true);
+                else
+                {
+                    critical_print("We've got a big mistake. No reset Ready received.");
+                }
                 Ready();
             }
             else if (nextCommand.Equals("Quit"))
@@ -217,16 +243,17 @@ public class UserComponent : MonoBehaviour
             else if (nextCommand.Equals("Next"))
             {
                 // Obtains and applies torques from python script to the limbs
-                Debug.Log("GOT NEXT");
-                string[] stringTorques = connection.readline().Split(' ');
-                controlled_print("Received Torques length: " + stringTorques.Length.ToString());
+                string stringTorques = connection.readline();
+                controlled_print("Received Torques length: " + stringTorques.ToString());
 
                 lock (torquesToApply_locker)
                 {
-                    for (int i = 0; i < movableLimbs.Length; i++)
-                    {
-                        torquesToApply[i] = float.Parse(stringTorques[i]);
-                    }
+                    // for (int i = 0; i < movableLimbs.Length; i++)
+                    // {
+                    //     torquesToApply[i] = float.Parse(stringTorques[i]);
+                    // }
+
+                    torquesToApply = string2floatArray(stringTorques);
                 }
 
                 // waitingForNewFrame = true;
@@ -253,7 +280,14 @@ public class UserComponent : MonoBehaviour
         {
             for (int i = 0; i < movableLimbs.Length; i++)
             {
+                // if(i == 4){
                 rigidBodies[i].AddTorque(new Vector3(torquesToApply[i], 0, 0), ForceMode.Force);
+                // }
+                // else // todo, don't forget to remove this
+                // {
+                    // movableLimbs[i].transform.localRotation = Quaternion.Euler(expectedAngles[i] * 57.29577951f, 0, 0);
+
+                // }
             }
         }
 
@@ -527,6 +561,42 @@ public class UserComponent : MonoBehaviour
         else
         {
             controlled_print(message);
+        }
+    }
+
+    /**
+     * Splits the string into float array where elements are divided by a space (' ')
+     */
+    public static float[] string2floatArray(string original)
+    {
+        string[] stringData = original.Split(' ');
+        float[] floatArrayData = new float[stringData.Length];
+
+        for (int i = 0; i < stringData.Length; i++)
+        {
+            floatArrayData[i] = float.Parse(stringData[i]);
+        }
+
+        return floatArrayData;
+    }
+
+    /**
+     * Recursively goes through the ancestors of the object to find if it has the specified parent.
+     */
+    public static bool isAncestor(Transform inQuestion, string name)
+    {
+        if (inQuestion.parent == null)
+        {
+            return false;
+        }
+
+        if (inQuestion.parent.name.Equals(name))
+        {
+            return true;
+        }
+        else
+        {
+            return isAncestor(inQuestion.parent, name);
         }
     }
 
