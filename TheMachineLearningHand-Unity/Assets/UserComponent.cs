@@ -74,6 +74,7 @@ public class UserComponent : MonoBehaviour
         {
             movableLimbs[i] = ((HingeJoint) sortedHingeJoints[i]).gameObject;
             rigidBodies[i] = ((GameObject) movableLimbs[i]).GetComponent(typeof(Rigidbody)) as Rigidbody;
+            rigidBodies[i].maxAngularVelocity = 1000;
         }
 
         startingAngles = new float[movableLimbs.Length];
@@ -222,7 +223,6 @@ public class UserComponent : MonoBehaviour
             // Step Loop-6 (as per protocol)
             if (nextCommand.Equals("Reset"))
             {
-
                 if (FrameViewer.earlyReset == true)
                 {
                     ResetTrainingSequence_forThread(true);
@@ -234,6 +234,7 @@ public class UserComponent : MonoBehaviour
                 {
                     critical_print("We've got a big mistake. No reset Ready received.");
                 }
+
                 Ready();
             }
             else if (nextCommand.Equals("Quit"))
@@ -281,11 +282,31 @@ public class UserComponent : MonoBehaviour
             for (int i = 0; i < movableLimbs.Length; i++)
             {
                 // if(i == 4){
-                rigidBodies[i].AddTorque(new Vector3(torquesToApply[i], 0, 0), ForceMode.Force);
+                // rigidBodies[i].AddTorque(new Vector3(torquesToApply[i], 0, 0), ForceMode.Force); // todo, old command, maybe change back?
+                // rigidBodies[i].AddTorque(new Vector3(torquesToApply[i], 0, 0), ForceMode.VelocityChange); // todo, old command, maybe change back?
+                
+                // if (i != 4)
+                // {
+                    // torquesToApply[i] = 0;
+                // }
+
+                if (i % 3 != 0) // TODO, if this works, then make a function that searches for the nearest parent with a rigid body (if exists)
+                {
+                    rigidBodies[i].angularVelocity =
+                        new Vector3(
+                            movableLimbs[i].transform.parent.GetComponent<Rigidbody>().angularVelocity.x +
+                            torquesToApply[i], 0, 0);
+                }
+                else
+                {
+                    rigidBodies[i].angularVelocity = new Vector3(torquesToApply[i], 0, 0);
+                }
                 // }
                 // else // todo, don't forget to remove this
                 // {
-                    // movableLimbs[i].transform.localRotation = Quaternion.Euler(expectedAngles[i] * 57.29577951f, 0, 0);
+                // movableLimbs[i].transform.localRotation = Quaternion.Euler(expectedAngles[i] * 57.29577951f, 0, 0);
+                // rigidBodies[i] = new Vector3(0, 0, 0);
+                // movableLimbs[i].transform.lo
 
                 // }
             }

@@ -64,21 +64,20 @@ DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
 ms_time_per_data_frame = 1000 / DATA_FRAMES_PER_SECOND
 NUMBER_OF_SENSORS = len(data_set.get("sensor"))
 NUMBER_OF_LIMBS = len(data_set.get("angle")) * len(data_set.get("angle")[0])
-ANGLE_THRESHOLD_RADIANS = 10 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
-MAX_REWARD_ANGLE_DIF_RADIANS = 8 * math.pi / 180.0  # the distance off-perfect which is given max reward
+ANGLE_THRESHOLD_RADIANS = 8 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
+MAX_REWARD_ANGLE_DIF_RADIANS = 3 * math.pi / 180.0  # the distance off-perfect which is given max reward
 
 # possible_forces = [-0.0128, -0.0064, -0.0032, -0.0016, -0.0008, -0.0004, -0.0002, -0.0001,
 #                    0.0,
 #                    0.0001, 0.0002, 0.0004, 0.0008, 0.0016, 0.0032, 0.0064, 0.0128]
-possible_forces = [-20,
-                   0.0]
+possible_forces = [-20, 0.0]
 
 # For a given limb, the following are constants that contribute to its reward
 REWARD_MAX_GAIN = 100
-REWARD_HIGH_GAIN = 30
+REWARD_HIGH_GAIN = 5
 REWARD_OTHER_GAIN = 1
 
-MAX_CONSECUTIVE_FAILED_FRAMES = 4
+MAX_CONSECUTIVE_FAILED_FRAMES = 2
 failed_frame_count = 0
 
 eps = np.finfo(np.float32).eps.item()
@@ -86,43 +85,42 @@ eps = np.finfo(np.float32).eps.item()
 
 # Actor definition
 class CustomModel:
-    # Training variables
-    # optimizer = keras.optimizers.Adam(learning_rate=0.01)
-    optimizer = keras.optimizers.Adam(learning_rate=10)
-    huber_loss = keras.losses.Huber()
-    action_probs_history = []
-    critic_value_history = []
-    rewards_history = []
-    running_reward = 0
-    episode_count = 0
-
-    current_action_index = None
-
-    NUM_ACTIONS = 0
 
     def __init__(self, gamma=0.99):
+        # Object variables (non-static variables)
+        self.optimizer = keras.optimizers.Adam(learning_rate=0.2)
+        self.huber_loss = keras.losses.Huber()
+        self.action_probs_history = []
+        self.critic_value_history = []
+        self.rewards_history = []
+        self.running_reward = 0
+        self.episode_count = 0
+        self.current_action_index = None
+        self.NUM_ACTIONS = 0
+
+        # Normal constructor stuff
         self.gamma = gamma
 
         self.NUM_ACTIONS = len(possible_forces)
 
         # Creates the model for the agent
-        inputs = layers.Input(shape=(50,))  # todo, change back?
-        dense = layers.Dense(64, activation="relu",
-                              kernel_initializer=keras.initializers.zeros,
-                              bias_initializer=keras.initializers.Zeros()
-                              )(inputs)
-        common = layers.Dense(64, activation="relu",
-                              kernel_initializer=keras.initializers.zeros,
-                              bias_initializer=keras.initializers.Zeros()
-                              )(dense)
-        action = layers.Dense(self.NUM_ACTIONS, activation="softmax",
-                              kernel_initializer=keras.initializers.zeros,
-                              bias_initializer=keras.initializers.Zeros()
-                              )(common)
-        critic = layers.Dense(1, kernel_initializer=keras.initializers.zeros,
-                              bias_initializer=keras.initializers.Zeros()
-                              )(common) # Todo, switch back to common?
-        self.model = keras.Model(inputs=inputs, outputs=[action, critic])
+        self.inputs = layers.Input(shape=(50,))  # todo, change back?
+        self.dense = layers.Dense(64, activation="relu",
+                                  kernel_initializer=keras.initializers.zeros,
+                                  bias_initializer=keras.initializers.Zeros()
+                                  )(self.inputs)
+        self.common = layers.Dense(64, activation="relu",
+                                   kernel_initializer=keras.initializers.zeros,
+                                   bias_initializer=keras.initializers.Zeros()
+                                   )(self.dense)
+        self.action = layers.Dense(self.NUM_ACTIONS, activation="softmax",
+                                   kernel_initializer=keras.initializers.zeros,
+                                   bias_initializer=keras.initializers.Zeros()
+                                   )(self.common)
+        self.critic = layers.Dense(1, kernel_initializer=keras.initializers.zeros,
+                                   bias_initializer=keras.initializers.Zeros()
+                                   )(self.common)  # Todo, switch back to common?
+        self.model = keras.Model(inputs=self.inputs, outputs=[self.action, self.critic])
 
         self.tape = tf.GradientTape()
 
@@ -133,6 +131,8 @@ class CustomModel:
 
             # Predict action probabilities and estimated future rewards from environment state
             action_probs, critic_value = self.model(state)
+            critical_print("Probabilities: " + str(action_probs))
+            # critical_print("Critic value: " + str(critic_value)) # todo, remove this later
             self.critic_value_history.append(critic_value[0, 0])
 
             # Sample action from action probability distribution
@@ -148,12 +148,18 @@ class CustomModel:
         # - Rewards in the past are discounted by multiplying them with gamma
         # - These are the labels for our critic
         with self.tape as tape:
+            # self.action_probs_history = self.action_probs_history[2::]  # Todo, remove?
+            # self.rewards_history = self.rewards_history[2::]
+            # self.critic_value_history = self.critic_value_history[2::]
+
             returns = []
             discounted_sum = 0
             # for r in self.rewards_history[1::-1]:  # TODO, fix here?
             for r in self.rewards_history[::-1]:  # TODO, fix here?
                 discounted_sum = r + self.gamma * discounted_sum
                 returns.insert(0, discounted_sum)
+            critical_print("self.reward_history length: " + str(len(self.rewards_history)))
+            critical_print("DISCOUNRTED SUM: " + str(discounted_sum))
 
             # Normalize
             returns = np.array(returns)
@@ -192,15 +198,16 @@ class CustomModel:
         # This reward gives a "flat" reward when the difference approaches 0,
         # but a very negative beyond the ANGLE_THRESHOLD_RADIANS
 
-        if math.fabs(expected_angle - unity_angle) <= MAX_REWARD_ANGLE_DIF_RADIANS:
-            return math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2)
-        else:
-            return max(-math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2)*5,
-                       -math.pow(self.r2d(expected_angle - unity_angle), 2)
-                       + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
-            # return max(0.0,
-            #            -math.pow(self.r2d(expected_angle - unity_angle), 2)
-            #            + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
+        # if math.fabs(expected_angle - unity_angle) <= MAX_REWARD_ANGLE_DIF_RADIANS:
+        #     return math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2)
+        # else:
+        #     return max(-math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2),
+        #                 -math.pow(self.r2d(expected_angle - unity_angle), 2)
+        #                 + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
+        return (-math.pow(self.r2d(expected_angle - unity_angle), 2) + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
+        # return max(0.0,
+        #            -math.pow(self.r2d(expected_angle - unity_angle), 2)
+        #            + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
 
     def compute_reward(self, unity_angles, expected_angles,
                        max_reward_indices,
@@ -233,7 +240,7 @@ class CustomModel:
 models = []
 NUMBER_OF_INPUTS = NUMBER_OF_SENSORS + NUMBER_OF_LIMBS * DATA_PER_LIMB
 for i in range(0, NUMBER_OF_LIMBS):
-    models.append(CustomModel(gamma=0.20))
+    models.append(CustomModel(gamma=0.90))
 
 """
     Exchanges data between data reference file and Unity
@@ -277,6 +284,8 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
     connection_handler.print("Ready")
     failed_frame_count = 0
     next_torques = [0 for i in range(0, NUMBER_OF_LIMBS)]
+    # previous_state = None
+    # rewards = [0 for k in range(0, 15)]
 
     while not failed_episode:
         is_unity_ready = connection_handler.input()
@@ -349,6 +358,9 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
         # if previous_state is None:
         #     previous_state = current_state
 
+        # if previous_state is None:
+        #     previous_state = current_state
+
         next_torques = []
         for m in range(0, len(models)):
             model = models[m]
@@ -365,14 +377,26 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
                                           max_list,
                                           high_list,
                                           [])  # TODO, add more dependencies
-            if latest_frame_index <= 0:
-                reward = 0
+            # if latest_frame_index <= 1:
+            #     reward = 0
 
             # reward = 1
 
             # next_torques.append(possible_forces[model.step(state=previous_state, reward=reward)])
             next_torques.append(possible_forces[model.step(state=current_state, reward=reward)])
+
+            # if (int(next_torques[m]) == 0): # TODO, REMOVE THIS LATER
+            #     rewards[m] = -1
+            #     critical_print("AAAAAAAAAAAAAAAA")
+            # else:
+            #     rewards[m] = 0
+            #     critical_print("BBBBBBBBBBBBBBB")
+
+            # next_torques.append(possible_forces[model.step(state=previous_state, reward=reward)])
             critical_print("REWARD: " + str(reward))
+
+        # rewards = [0 for k in range(0,15)]
+        # previous_state = current_state
 
         # Loop-3 condition
         if latest_unity_time >= TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
