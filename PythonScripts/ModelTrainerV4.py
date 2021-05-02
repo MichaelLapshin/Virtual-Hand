@@ -59,15 +59,15 @@ critical_print("Received first C# inputs: " + dataset_name + " " + model_name)
 
 # Obtains data
 data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + dataset_name + ".hdf5", 'r')
-DATA_FRAMES_PER_SECOND = 10
+DATA_FRAMES_PER_SECOND = 50
 DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
 ms_time_per_data_frame = 1000 / DATA_FRAMES_PER_SECOND
 NUMBER_OF_SENSORS = len(data_set.get("sensor"))
 NUMBER_OF_LIMBS = len(data_set.get("angle")) * len(data_set.get("angle")[0])
 NUMBER_OF_INPUTS = NUMBER_OF_SENSORS + NUMBER_OF_LIMBS * DATA_PER_LIMB
 
-ANGLE_THRESHOLD_RADIANS = 3 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
-MAX_REWARD_ANGLE_DIF_RADIANS = 3 * math.pi / 180.0  # the distance off-perfect which is given max reward
+ANGLE_THRESHOLD_RADIANS = 1 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
+# MAX_REWARD_ANGLE_DIF_RADIANS = 3 * math.pi / 180.0  # the distance off-perfect which is given max reward
 
 # possible_forces = [-0.0128, -0.0064, -0.0032, -0.0016, -0.0008, -0.0004, -0.0002, -0.0001,
 #                    0.0,
@@ -76,16 +76,17 @@ possible_forces = [0, -0.035, 0.035, -0.075, 0.075, -0.125, 0.125, -0.25, 0.25, 
 # possible_forces = [-20, 0.0]
 
 # For a given limb, the following are constants that contribute to its reward
-REWARD_MAX_GAIN = 100
-REWARD_HIGH_GAIN = 5
-REWARD_OTHER_GAIN = 1
+REWARD_MAX_GAIN = 10
+REWARD_HIGH_GAIN = 0
+REWARD_OTHER_GAIN = 0
 REWARD_EXPONENT = 2
 LEARNING_RATE = 0.4
+NUMBER_OF_DENSE_NEURONS = 64
+DENSE_ACTIVATION_FUNCTIONS = ["linear", "linear", "relu", "linear", "selu", "swish", "linear"]
 
 # Constants to determine which frames are to be used
-EARLIEST_FRAME_TO_USE = 1
-
-MAX_CONSECUTIVE_FAILED_FRAMES = 2
+EARLIEST_FRAME_TO_USE = 2
+MAX_CONSECUTIVE_FAILED_FRAMES = 1
 failed_frame_count = 0
 
 eps = np.finfo(np.float32).eps.item()
@@ -112,23 +113,29 @@ class CustomModel:
         self.NUM_ACTIONS = len(possible_forces)
 
         # Creates the model for the agent
-        self.inputs = layers.Input(shape=(NUMBER_OF_INPUTS,))  # todo, change back?
-        self.dense = layers.Dense(64, activation="relu",
-                                  kernel_initializer=keras.initializers.zeros,
-                                  bias_initializer=keras.initializers.Zeros()
-                                  )(self.inputs)
-        self.common = layers.Dense(64, activation="relu",
+        inputs = layers.Input(shape=(NUMBER_OF_INPUTS,))  # todo, change back?
+        dense = layers.Dense(NUMBER_OF_DENSE_NEURONS, activation="relu",
+                             kernel_initializer=keras.initializers.zeros,
+                             bias_initializer=keras.initializers.Zeros()
+                             )(inputs)
+        common1 = layers.Dense(NUMBER_OF_DENSE_NEURONS, activation="relu",
+                               kernel_initializer=keras.initializers.zeros,
+                               bias_initializer=keras.initializers.Zeros()
+                               )(dense)
+        for f in DENSE_ACTIVATION_FUNCTIONS:
+            common2 = layers.Dense(NUMBER_OF_DENSE_NEURONS, activation=f,
                                    kernel_initializer=keras.initializers.zeros,
                                    bias_initializer=keras.initializers.Zeros()
-                                   )(self.dense)
-        self.action = layers.Dense(self.NUM_ACTIONS, activation="softmax",
-                                   kernel_initializer=keras.initializers.zeros,
-                                   bias_initializer=keras.initializers.Zeros()
-                                   )(self.common)
-        self.critic = layers.Dense(1, kernel_initializer=keras.initializers.zeros,
-                                   bias_initializer=keras.initializers.Zeros()
-                                   )(self.common)  # Todo, switch back to common?
-        self.model = keras.Model(inputs=self.inputs, outputs=[self.action, self.critic])
+                                   )(common1)
+            common1 = common2
+        action = layers.Dense(self.NUM_ACTIONS, activation="softmax",
+                              kernel_initializer=keras.initializers.zeros,
+                              bias_initializer=keras.initializers.Zeros()
+                              )(common1)
+        critic = layers.Dense(1, kernel_initializer=keras.initializers.zeros,
+                              bias_initializer=keras.initializers.Zeros()
+                              )(common1)  # Todo, switch back to common?
+        self.model = keras.Model(inputs=inputs, outputs=[action, critic])
 
         self.tape = tf.GradientTape()
 
@@ -155,6 +162,10 @@ class CustomModel:
         # - At each timestep what was the total reward received after that timestep
         # - Rewards in the past are discounted by multiplying them with gamma
         # - These are the labels for our critic
+
+        if EARLIEST_FRAME_TO_USE >= len(self.action_probs_history):
+            return
+
         with self.tape as tape:
             cropped_action_probs_history = self.action_probs_history[EARLIEST_FRAME_TO_USE::]  # Todo, remove?
             cropped_rewards_history = self.rewards_history[EARLIEST_FRAME_TO_USE::]
@@ -170,7 +181,7 @@ class CustomModel:
                 # discounted_sum = r + p * self.gamma
                 # p = r
                 returns.insert(0, discounted_sum)
-                if r == cropped_rewards_history[-1]: # TODO, remove this statement?
+                if r == cropped_rewards_history[-1]:  # TODO, remove this statement?
                     discounted_sum = 0
             critical_print("self.reward_history length: " + str(len(cropped_rewards_history)))
             critical_print("DISCOUNRTED SUM: " + str(discounted_sum))
@@ -219,8 +230,9 @@ class CustomModel:
         #                 -math.pow(self.r2d(expected_angle - unity_angle), 2)
         #                 + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
         # todo, GRADIENT DESCENT!
-        # return -(-math.pow(self.r2d(math.fabs(expected_angle - unity_angle))*2,1) + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 1))
-        return -(-math.pow(self.r2d(math.fabs(unity_velocity - expected_velocity))*2,REWARD_EXPONENT)-math.pow(self.r2d(math.fabs(expected_angle - unity_angle))*2,REWARD_EXPONENT) + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), REWARD_EXPONENT))
+        return -(-math.pow(self.r2d(math.fabs(expected_angle - unity_angle)), REWARD_EXPONENT) + math.pow(
+            self.r2d(ANGLE_THRESHOLD_RADIANS), REWARD_EXPONENT))
+        # return -(-math.pow(self.r2d(math.fabs(unity_velocity - expected_velocity))*2,REWARD_EXPONENT)-math.pow(self.r2d(math.fabs(expected_angle - unity_angle))*2,REWARD_EXPONENT) + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), REWARD_EXPONENT))
         # return max(0.0,
         #            -math.pow(self.r2d(expected_angle - unity_angle), 2)
         #            + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
@@ -231,13 +243,16 @@ class CustomModel:
                        other_reward_indices=[]):
 
         # Computes the reward for a limb based on all of the listed related limbs
-        limb_reward = 0
+        limb_reward = 0.0
         for r in max_reward_indices:
-            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r], expected_velocities[r]) * REWARD_MAX_GAIN
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r],
+                                                        expected_velocities[r]) * REWARD_MAX_GAIN
         for r in high_reward_indices:
-            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r], expected_velocities[r]) * REWARD_HIGH_GAIN
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r],
+                                                        expected_velocities[r]) * REWARD_HIGH_GAIN
         for r in other_reward_indices:
-            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r], expected_velocities[r]) * REWARD_OTHER_GAIN
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r],
+                                                        expected_velocities[r]) * REWARD_OTHER_GAIN
 
         return limb_reward
 
@@ -255,7 +270,7 @@ class CustomModel:
 # Creates the models
 models = []
 for i in range(0, NUMBER_OF_LIMBS):
-    models.append(CustomModel(gamma=0.80))
+    models.append(CustomModel(gamma=0.95))
 
 """
     Exchanges data between data reference file and Unity
@@ -341,6 +356,7 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
 
         # Extracts angles from unity model for comparison
         current_limb_angles = limb_data[::DATA_PER_LIMB]
+        current_limb_velocities = limb_data[1::DATA_PER_LIMB]
 
         # Assert that expected and limb data is of the same length
         assert len(current_limb_angles) == len(expected_limb_angles)
@@ -388,9 +404,11 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
 
             if previous_state is None:
                 previous_state = [0 for k in range(0, NUMBER_OF_INPUTS)]
-                reward = model.compute_reward(starting_angles, starting_angles, max_list, high_list, [])
+                reward = model.compute_reward(starting_angles, starting_angles, starting_angles, starting_angles,
+                                              max_list, high_list, [])
             else:
-                reward = model.compute_reward(current_limb_angles, expected_limb_angles, max_list, high_list,
+                reward = model.compute_reward(current_limb_angles, expected_limb_angles, current_limb_velocities,
+                                              expected_limb_velocities, max_list, high_list,
                                               [])  # TODO, add more dependencies (or less)
 
             next_torques.append(possible_forces[model.step(state=previous_state, reward=reward)])

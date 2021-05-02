@@ -109,7 +109,7 @@ public class UserComponent : MonoBehaviour
         // Calls python training script.
         process.StartInfo.FileName = @"C:\Users\Michael\AppData\Local\Microsoft\WindowsApps\python.exe";
         string scriptPath = @"C:\Git\Virtual-Hand\PythonScripts\ModelTrainerV4.py";
-        string dataSetName = "RealData15"; // To be hard-coded (for now)
+        string dataSetName = "RealData15_smoothed"; // To be hard-coded (for now)
         string modelName = "FirstModelTest";
         process.StartInfo.Arguments = scriptPath;
 
