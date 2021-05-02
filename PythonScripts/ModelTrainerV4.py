@@ -64,18 +64,26 @@ DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
 ms_time_per_data_frame = 1000 / DATA_FRAMES_PER_SECOND
 NUMBER_OF_SENSORS = len(data_set.get("sensor"))
 NUMBER_OF_LIMBS = len(data_set.get("angle")) * len(data_set.get("angle")[0])
-ANGLE_THRESHOLD_RADIANS = 8 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
+NUMBER_OF_INPUTS = NUMBER_OF_SENSORS + NUMBER_OF_LIMBS * DATA_PER_LIMB
+
+ANGLE_THRESHOLD_RADIANS = 3 * math.pi / 180.0  # +- 10 degrees from actual angle threshold // TODO, modify this constant as needed
 MAX_REWARD_ANGLE_DIF_RADIANS = 3 * math.pi / 180.0  # the distance off-perfect which is given max reward
 
 # possible_forces = [-0.0128, -0.0064, -0.0032, -0.0016, -0.0008, -0.0004, -0.0002, -0.0001,
 #                    0.0,
 #                    0.0001, 0.0002, 0.0004, 0.0008, 0.0016, 0.0032, 0.0064, 0.0128]
-possible_forces = [-20, 0.0]
+possible_forces = [0, -0.035, 0.035, -0.075, 0.075, -0.125, 0.125, -0.25, 0.25, 0.5, 0.5, -1, 1, -2, 2, -4, 4]
+# possible_forces = [-20, 0.0]
 
 # For a given limb, the following are constants that contribute to its reward
 REWARD_MAX_GAIN = 100
 REWARD_HIGH_GAIN = 5
 REWARD_OTHER_GAIN = 1
+REWARD_EXPONENT = 2
+LEARNING_RATE = 0.4
+
+# Constants to determine which frames are to be used
+EARLIEST_FRAME_TO_USE = 1
 
 MAX_CONSECUTIVE_FAILED_FRAMES = 2
 failed_frame_count = 0
@@ -88,7 +96,7 @@ class CustomModel:
 
     def __init__(self, gamma=0.99):
         # Object variables (non-static variables)
-        self.optimizer = keras.optimizers.Adam(learning_rate=0.2)
+        self.optimizer = keras.optimizers.Adam(learning_rate=LEARNING_RATE)
         self.huber_loss = keras.losses.Huber()
         self.action_probs_history = []
         self.critic_value_history = []
@@ -104,7 +112,7 @@ class CustomModel:
         self.NUM_ACTIONS = len(possible_forces)
 
         # Creates the model for the agent
-        self.inputs = layers.Input(shape=(50,))  # todo, change back?
+        self.inputs = layers.Input(shape=(NUMBER_OF_INPUTS,))  # todo, change back?
         self.dense = layers.Dense(64, activation="relu",
                                   kernel_initializer=keras.initializers.zeros,
                                   bias_initializer=keras.initializers.Zeros()
@@ -148,17 +156,23 @@ class CustomModel:
         # - Rewards in the past are discounted by multiplying them with gamma
         # - These are the labels for our critic
         with self.tape as tape:
-            # self.action_probs_history = self.action_probs_history[2::]  # Todo, remove?
-            # self.rewards_history = self.rewards_history[2::]
-            # self.critic_value_history = self.critic_value_history[2::]
+            cropped_action_probs_history = self.action_probs_history[EARLIEST_FRAME_TO_USE::]  # Todo, remove?
+            cropped_rewards_history = self.rewards_history[EARLIEST_FRAME_TO_USE::]
+            cropped_critic_value_history = self.critic_value_history[EARLIEST_FRAME_TO_USE::]
 
             returns = []
             discounted_sum = 0
             # for r in self.rewards_history[1::-1]:  # TODO, fix here?
-            for r in self.rewards_history[::-1]:  # TODO, fix here?
+            # p = 0
+            for r in cropped_rewards_history[::-1]:  # TODO, fix here?
                 discounted_sum = r + self.gamma * discounted_sum
+
+                # discounted_sum = r + p * self.gamma
+                # p = r
                 returns.insert(0, discounted_sum)
-            critical_print("self.reward_history length: " + str(len(self.rewards_history)))
+                if r == cropped_rewards_history[-1]: # TODO, remove this statement?
+                    discounted_sum = 0
+            critical_print("self.reward_history length: " + str(len(cropped_rewards_history)))
             critical_print("DISCOUNRTED SUM: " + str(discounted_sum))
 
             # Normalize
@@ -167,7 +181,7 @@ class CustomModel:
             returns = returns.tolist()
 
             # Calculating loss values to update our network
-            history = zip(self.action_probs_history, self.critic_value_history, returns)
+            history = zip(cropped_action_probs_history, cropped_critic_value_history, returns)
             actor_losses = []
             critic_losses = []
             for log_prob, value, ret in history:
@@ -194,7 +208,7 @@ class CustomModel:
     def r2d(self, radians):  # radian to degrees conversion
         return radians * 180 / math.pi
 
-    def individual_angle_reward(self, unity_angle, expected_angle):
+    def individual_angle_reward(self, unity_angle, expected_angle, unity_velocity, expected_velocity):
         # This reward gives a "flat" reward when the difference approaches 0,
         # but a very negative beyond the ANGLE_THRESHOLD_RADIANS
 
@@ -204,12 +218,14 @@ class CustomModel:
         #     return max(-math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2),
         #                 -math.pow(self.r2d(expected_angle - unity_angle), 2)
         #                 + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
-        return (-math.pow(self.r2d(expected_angle - unity_angle), 2) + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
+        # todo, GRADIENT DESCENT!
+        # return -(-math.pow(self.r2d(math.fabs(expected_angle - unity_angle))*2,1) + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 1))
+        return -(-math.pow(self.r2d(math.fabs(unity_velocity - expected_velocity))*2,REWARD_EXPONENT)-math.pow(self.r2d(math.fabs(expected_angle - unity_angle))*2,REWARD_EXPONENT) + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), REWARD_EXPONENT))
         # return max(0.0,
         #            -math.pow(self.r2d(expected_angle - unity_angle), 2)
         #            + math.pow(self.r2d(ANGLE_THRESHOLD_RADIANS), 2))
 
-    def compute_reward(self, unity_angles, expected_angles,
+    def compute_reward(self, unity_angles, expected_angles, unity_velocities, expected_velocities,
                        max_reward_indices,
                        high_reward_indices=[],
                        other_reward_indices=[]):
@@ -217,11 +233,11 @@ class CustomModel:
         # Computes the reward for a limb based on all of the listed related limbs
         limb_reward = 0
         for r in max_reward_indices:
-            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r]) * REWARD_MAX_GAIN
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r], expected_velocities[r]) * REWARD_MAX_GAIN
         for r in high_reward_indices:
-            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r]) * REWARD_HIGH_GAIN
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r], expected_velocities[r]) * REWARD_HIGH_GAIN
         for r in other_reward_indices:
-            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r]) * REWARD_OTHER_GAIN
+            limb_reward += self.individual_angle_reward(unity_angles[r], expected_angles[r], unity_velocities[r], expected_velocities[r]) * REWARD_OTHER_GAIN
 
         return limb_reward
 
@@ -238,9 +254,8 @@ class CustomModel:
 
 # Creates the models
 models = []
-NUMBER_OF_INPUTS = NUMBER_OF_SENSORS + NUMBER_OF_LIMBS * DATA_PER_LIMB
 for i in range(0, NUMBER_OF_LIMBS):
-    models.append(CustomModel(gamma=0.90))
+    models.append(CustomModel(gamma=0.80))
 
 """
     Exchanges data between data reference file and Unity
@@ -253,9 +268,11 @@ if temp != "Ready":
     connection_handler.print("ERROR. Did not receive ready from C#. Received: " + temp)
 
 string_starting_angles = ""
+starting_angles = []
 for finger_index in range(0, 5):
     for limb_index in range(0, 3):
         string_starting_angles += " " + str(data_set.get("angle")[finger_index][limb_index][0])
+        starting_angles.append(data_set.get("angle")[finger_index][limb_index][0])
 string_starting_angles = string_starting_angles.lstrip(" ")
 
 controlled_print("Sending starting angles to C#")
@@ -284,7 +301,7 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
     connection_handler.print("Ready")
     failed_frame_count = 0
     next_torques = [0 for i in range(0, NUMBER_OF_LIMBS)]
-    # previous_state = None
+    previous_state = None
     # rewards = [0 for k in range(0, 15)]
 
     while not failed_episode:
@@ -308,9 +325,11 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
 
         # Obtains the expected output
         expected_limb_angles = []
+        expected_limb_velocities = []
         for finger_index in range(0, 5):
             for limb_index in range(0, 3):
                 expected_limb_angles.append(data_set.get("angle")[finger_index][limb_index][latest_frame_index])
+                expected_limb_velocities.append(data_set.get("velocity")[finger_index][limb_index][latest_frame_index])
 
         # Sends the expected angles to the C# script for display
         stringExpectedAngles = ""
@@ -353,13 +372,7 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
 
         # Preparing the model inputs (Gathers the data + converts to tuple)
         # previous_state = current_state  # todo, new variable used to "shift" the reward-state assignment
-        current_state = (np.array(limb_data + current_sensor_readings + next_torques))
-
-        # if previous_state is None:
-        #     previous_state = current_state
-
-        # if previous_state is None:
-        #     previous_state = current_state
+        current_state = (np.array(limb_data + current_sensor_readings))  # + next_torques))
 
         next_torques = []
         for m in range(0, len(models)):
@@ -373,30 +386,28 @@ while latest_unity_time < TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:
             high_list = [int(m / 3) * 3, int(m / 3) * 3 + 1, int(m / 3) * 3 + 2]
             high_list.remove(m)
 
-            reward = model.compute_reward(current_limb_angles, expected_limb_angles,
-                                          max_list,
-                                          high_list,
-                                          [])  # TODO, add more dependencies
-            # if latest_frame_index <= 1:
-            #     reward = 0
+            if previous_state is None:
+                previous_state = [0 for k in range(0, NUMBER_OF_INPUTS)]
+                reward = model.compute_reward(starting_angles, starting_angles, max_list, high_list, [])
+            else:
+                reward = model.compute_reward(current_limb_angles, expected_limb_angles, max_list, high_list,
+                                              [])  # TODO, add more dependencies (or less)
 
-            # reward = 1
+            next_torques.append(possible_forces[model.step(state=previous_state, reward=reward)])
+            # a = [0 for k in range(0, int(m / 3) * 3)]
+            # b = list(previous_state[int(m / 3) * 3:int(m / 3) * 3 + 3:])
+            # c = [0 for k in range(int(m / 3) * 3 + 3, 30)]
+            # d = list(previous_state[30::])
+            # e = a + b + c + d
+            # next_torques.append(possible_forces[model.step(state=e, reward=reward)])
 
-            # next_torques.append(possible_forces[model.step(state=previous_state, reward=reward)])
-            next_torques.append(possible_forces[model.step(state=current_state, reward=reward)])
-
-            # if (int(next_torques[m]) == 0): # TODO, REMOVE THIS LATER
-            #     rewards[m] = -1
-            #     critical_print("AAAAAAAAAAAAAAAA")
-            # else:
-            #     rewards[m] = 0
-            #     critical_print("BBBBBBBBBBBBBBB")
+            # next_torques.append(possible_forces[model.step(state=current_state, reward=reward)])
 
             # next_torques.append(possible_forces[model.step(state=previous_state, reward=reward)])
             critical_print("REWARD: " + str(reward))
 
         # rewards = [0 for k in range(0,15)]
-        # previous_state = current_state
+        previous_state = current_state
 
         # Loop-3 condition
         if latest_unity_time >= TOTAL_NUMBER_OF_FRAMES * ms_time_per_data_frame:

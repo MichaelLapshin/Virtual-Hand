@@ -9,11 +9,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-SAVE_AS_IMAGES = False
+SAVE_AS_IMAGES = True
 training_name = input("Enter the training name: ")
 
 # General Information
 reader = h5py.File("./training_datasets/" + training_name + ".hdf5", 'r')
+print("Number of frames =", len(list(reader.get("time"))))
 print("Keys:", reader.keys())
 print("Features length:", len(reader))
 
@@ -67,7 +68,31 @@ for finger in range(0, 5):
     plt.ylabel("Angle (radians)")
     plt.legend(limb_part)
     if SAVE_AS_IMAGES:
-        plt.savefig(training_name + "_"+finger_name[finger]+".png", bbox_inches='tight')
+        plt.savefig(training_name + "_"+finger_name[finger]+"_angle.png", bbox_inches='tight')
+    plt.show()
+
+for finger in range(0, 5):
+    plt.plot(np.array(reader.get("velocity")[finger][0]))
+    plt.plot(np.array(reader.get("velocity")[finger][1]))
+    plt.plot(np.array(reader.get("velocity")[finger][2]))
+    plt.title(label=training_name + " " + finger_name[finger])
+    plt.xlabel("Frame")
+    plt.ylabel("Velocity (radians)")
+    plt.legend(limb_part)
+    if SAVE_AS_IMAGES:
+        plt.savefig(training_name + "_"+finger_name[finger]+"_velocity.png", bbox_inches='tight')
+    plt.show()
+
+for finger in range(0, 5):
+    plt.plot(np.array(reader.get("acceleration")[finger][0]))
+    plt.plot(np.array(reader.get("acceleration")[finger][1]))
+    plt.plot(np.array(reader.get("acceleration")[finger][2]))
+    plt.title(label=training_name + " " + finger_name[finger])
+    plt.xlabel("Frame")
+    plt.ylabel("Acceleration (radians)")
+    plt.legend(limb_part)
+    if SAVE_AS_IMAGES:
+        plt.savefig(training_name + "_"+finger_name[finger]+"_acceleration.png", bbox_inches='tight')
     plt.show()
 
 reader.close()

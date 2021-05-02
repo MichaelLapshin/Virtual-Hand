@@ -83,8 +83,6 @@ acceleration: [[fingerAngular acceleration]*fingers]
 time_list = []
 sensor_list = []
 angle_list = [[[], [], []], [[], [], []], [[], [], []], [[], [], []], [[], [], []]]
-velocity_list = [[[], [], []], [[], [], []], [[], [], []], [[], [], []], [[], [], []]]
-acceleration_list = [[[], [], []], [[], [], []], [[], [], []], [[], [], []], [[], [], []]]
 
 # Indexes the incoming sensor data (sensor key character -> number between 0 and total sensor count)
 sensor_to_index_map = {}
@@ -134,27 +132,9 @@ sensor_data.quit()
 hand_angler.quit()
 
 
-# Post-processing to obtain limb angular velocity/acceleration
-def generate_derivative_limb_data(original_list):
-    derivative_list = []
-    for index in range(1, len(original_list)):
-        derivative_list.append(original_list[index] - original_list[index])
-    derivative_list.insert(0, derivative_list[0])  # assigns the first element to be that of the second
-    return derivative_list
-
-
-for finger_index in range(0, 5):
-    for limb_index in range(0, 3):
-        # Calculated limb velocities based on the limb angles
-        velocity_list[finger_index][limb_index] = generate_derivative_limb_data(angle_list[finger_index][limb_index])
-        # Calculated limb accelerations based on the limb velocities
-        acceleration_list[finger_index][limb_index] = generate_derivative_limb_data(velocity_list[finger_index][limb_index])
-
 # Saves the training data
-hf = h5py.File("./training_datasets/" + training_name + ".hdf5", 'w')
+hf = h5py.File("./training_datasets/" + training_name + "_raw.hdf5", 'w')
 hf.create_dataset("time", data=time_list)
 hf.create_dataset("sensor", data=sensor_list)
 hf.create_dataset("angle", data=angle_list)
-hf.create_dataset("velocity", data=velocity_list)
-hf.create_dataset("acceleration", data=acceleration_list)
 hf.close()
