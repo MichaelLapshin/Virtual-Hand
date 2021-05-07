@@ -13,7 +13,7 @@ import sys
 sys.stderr = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientError_ConnectionHandler.txt", "w")
 sys.stdout = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientLog.txt", 'a')
 
-print_to_logs = True
+print_to_logs = False
 
 def controlled_print(message):
     """
