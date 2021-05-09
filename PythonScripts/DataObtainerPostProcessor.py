@@ -6,13 +6,13 @@
 import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # To remove the redundant warnings
-import time
-import SensorListener
-import MediapipeHandAngler
 import numpy
 import h5py
-import copy
 import math
+import numpy as np
+import time
+
+from TrainingDataPlotter import PlotData
 
 """
 # Training data format
@@ -30,15 +30,29 @@ acceleration: [[[fingerAngularAcceleration]*fingerLimb]*fingers]
 * Note: the angle(and its derivatives) lists is in the 5 by 3 by N format
 """
 
+# Questionaire
 ORIGINAL_FILE_NAME = input("Original file name: ")
+NEW_FILE_NAME = ORIGINAL_FILE_NAME.rstrip("_raw") + "_" + input("What extension should the new file name have? ")
 ORIGINAL_FRAME_RATE = int(input("Original dataset framerate: "))
 NEW_FRAME_RATE = int(input("New frame rate (for data interpolation): "))
 SMOOTH_FRAMES = int(input("How many frames far should the smoothing look? "))  # 5 frames?
 SMOOTH_DIF_THRESHOLD = float(
-    input("What degree difference in the frames should the smooth?")) * 180.0 / math.pi  # 5 degrees?
+    input("What degree difference in the frames should the smooth? ")) * math.pi / 180.0  # 25 degrees?
+loop_times = int(input("How many times should the settings be applied to the data? "))
 
-reader = h5py.File("./training_datasets/" + ORIGINAL_FILE_NAME + ".hdf5", 'r')
-NEW_FILE_NAME = ORIGINAL_FILE_NAME.rstrip("_raw") + "_smoothed"
+# For visual display
+inp = input("Manual control of the iterations? ")
+manual_control = (inp == "yes" or inp == "y" or inp == "1")
+
+draw_result = True
+if not manual_control:
+    inp = input("Draw final result? ")
+    draw_result = (inp == "yes" or inp == "y" or inp == "1")
+
+# Constants
+NUM_FINGERS = 5
+NUM_LIMBS_PER_FINGER = 3
+eps = np.finfo(np.float32).eps.item()
 
 
 # Original lists which the post-processing will be based off of
@@ -55,116 +69,123 @@ def float_int_unknownArray2list(u_list):
     return u_list
 
 
-original_time_list = float_int_unknownArray2list(reader.get("time"))
-original_sensor_list = float_int_unknownArray2list(reader.get("sensor"))
-original_angle_list = float_int_unknownArray2list(reader.get("angle"))
+# def loss_difference(focus_angle, question_angle):
+#     if focus_angle - question_angle != 0:
+#         return math.pow(math.fabs((focus_angle - question_angle)*10), 1.0 / 3)/10
+#     else:
+#         return 0
 
-assert len(original_time_list) == len(original_sensor_list[0]) == len(original_angle_list[0][0])
 
-# Empty lists to be filled by the program
-NUM_FINGERS = 5
-NUM_LIMBS_PER_FINGER = 3
-time_list = []
-sensor_list = [[] for a in range(0, NUM_FINGERS)]
-angle_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
-velocity_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
-acceleration_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
+def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, old_angle_list, times_remain=1):
+    if times_remain <= 0:
+        return old_time_list, old_sensor_list, old_angle_list
 
-# Smooth the angular data (averages out the angle using nearby samples)
-smooth_original_angle_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
-for finger_index in range(0, NUM_FINGERS):
-    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-        for f in range(0, len(original_time_list)):
-            new_angle = 0
-            frames_considered = 0
+    # Empty lists to be filled by the program
+    time_list = []
+    sensor_list = [[] for a in range(0, NUM_FINGERS)]
+    angle_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
 
-            # To the right of the subject frame
-            for r in range(1, SMOOTH_FRAMES):
-                if f + r >= len(original_angle_list[finger_index][limb_index]):
-                    break
-                if math.fabs(original_angle_list[finger_index][limb_index][f + r] -
-                             original_angle_list[finger_index][limb_index][f]) > SMOOTH_DIF_THRESHOLD:
-                    pass
-                else:
-                    new_angle += original_angle_list[finger_index][limb_index][f + r]
-                    frames_considered += 1
-
-            # To the left of the subject frame
-            for l in range(0, SMOOTH_FRAMES):
-                if f - l < 0:
-                    break
-                if math.fabs(original_angle_list[finger_index][limb_index][f - l] -
-                             original_angle_list[finger_index][limb_index][f]) > SMOOTH_DIF_THRESHOLD:
-                    pass
-                else:
-                    new_angle += original_angle_list[finger_index][limb_index][f - l]
-                    frames_considered += 1
-
-            if frames_considered == 0:
-                new_angle = original_angle_list[finger_index][limb_index][f]
-                frames_considered = 1
-
-            smooth_original_angle_list[finger_index][limb_index].append(new_angle / frames_considered)
-
-# Adjust the frame rate (linear interpolation)
-original_ms_per_frame = 1000.0 / ORIGINAL_FRAME_RATE
-new_ms_per_frame = 1000.0 / NEW_FRAME_RATE
-
-for f in range(1, len(original_time_list)):
-    # Retrieves relevant time values
-    previous_time = original_time_list[f - 1]
-    current_time = original_time_list[f]
-
-    # Computes difference
-    time_dif = current_time - previous_time
-    assert time_dif > 0
-
-    # Computes how many frames and the time difference between each frame to be used
-    frames_in_between = max(1, round((time_dif * 1.0) / new_ms_per_frame - 1))  # rounds number
-    time_between_frames = (time_dif * 1.0) / frames_in_between
-
-    # Appends time data
-    for c in range(0, frames_in_between + 1):
-        time_list.append(int(current_time - time_between_frames * c))
-
-    # Appends sensor data
-    for finger_index in range(0, NUM_FINGERS):
-        # Retrieves relevant sensor values
-        previous_sensor = original_sensor_list[finger_index][f - 1]
-        current_sensor = original_sensor_list[finger_index][f]
-
-        # Computes difference
-        sensor_dif = previous_sensor - current_sensor
-
-        # Computes slope
-        slope = sensor_dif / time_dif
-
-        for c in range(0, frames_in_between + 1):
-            sensor_list[finger_index].append(current_sensor - slope * c * time_between_frames)
-
-    # Appends angle data
+    # Smooth the angular data (averages out the angle using nearby samples)
+    smooth_old_angle_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
     for finger_index in range(0, NUM_FINGERS):
         for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-            # Retrieves relevant angle values
-            previous_angle = smooth_original_angle_list[finger_index][limb_index][f - 1]
-            current_angle = smooth_original_angle_list[finger_index][limb_index][f]
+            for f in range(0, len(old_time_list)):
+                new_angle = old_angle_list[finger_index][limb_index][f]
+                frames_considered = 1
+
+                # To the right of the subject frame
+                for r in range(1, SMOOTH_FRAMES):
+                    if f + r >= len(old_angle_list[finger_index][limb_index]):
+                        break
+                    if math.fabs(old_angle_list[finger_index][limb_index][f + r] -
+                                 old_angle_list[finger_index][limb_index][f]) > SMOOTH_DIF_THRESHOLD:
+                        break
+                    else:
+                        new_angle += old_angle_list[finger_index][limb_index][f + r] * (SMOOTH_FRAMES - r)
+                        frames_considered += (SMOOTH_FRAMES - r)
+
+                # To the left of the subject frame
+                for l in range(1, SMOOTH_FRAMES):
+                    if f - l < 0:
+                        break
+                    if math.fabs(old_angle_list[finger_index][limb_index][f - l] +
+                                 old_angle_list[finger_index][limb_index][f]) > SMOOTH_DIF_THRESHOLD:
+                        break
+                    else:
+                        new_angle += old_angle_list[finger_index][limb_index][f - l] * (SMOOTH_FRAMES - l)
+                        frames_considered += (SMOOTH_FRAMES - l)
+
+                smooth_old_angle_list[finger_index][limb_index].append(
+                    new_angle / frames_considered)  # / frames_considered)
+
+    # Adjust the frame rate (linear interpolation)
+    old_ms_per_frame = 1000.0 / old_frame_rate
+    new_ms_per_frame = 1000.0 / new_frame_rate
+
+    for f in range(1, len(old_time_list)):
+        # Retrieves relevant time values
+        # previous_time = old_time_list[f - 1]
+        # current_time = old_time_list[f]
+
+        # Computes difference
+        # time_dif = current_time - previous_time
+        time_dif = old_ms_per_frame
+        current_time = f * time_dif
+        previous_time = current_time - time_dif
+
+        # assert time_dif > 0
+
+        # Computes how many frames and the time difference between each frame to be used
+        frames_in_between = float(time_dif) / new_ms_per_frame - 1  # rounds number
+        time_between_frames = float(time_dif) / (frames_in_between + 1)
+
+        # Appends time data
+        for c in range(0, round(frames_in_between) + 1):
+            time_list.append(int(previous_time + time_between_frames * c))
+
+        # Appends sensor data
+        for finger_index in range(0, NUM_FINGERS):
+            # Retrieves relevant sensor values
+            previous_sensor = old_sensor_list[finger_index][f - 1]
+            current_sensor = old_sensor_list[finger_index][f]
 
             # Computes difference
-            angle_dif = previous_angle - current_angle
+            sensor_dif = current_sensor - previous_sensor
 
             # Computes slope
-            slope = angle_dif / time_dif
+            slope = float(sensor_dif) / time_dif
 
-            # Appends the angles to the new list
-            for c in range(0, frames_in_between + 1):
-                angle_list[finger_index][limb_index].append(current_angle - slope * c * time_between_frames)
+            for c in range(0, round(frames_in_between) + 1):
+                sensor_list[finger_index].append(previous_sensor + slope * c * time_between_frames)
 
-# Adds the missing front data
-time_list.insert(0, time_list[0])
-for finger_index in range(0, NUM_FINGERS):
-    sensor_list[finger_index].insert(0, sensor_list[finger_index][0])
-    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-        angle_list[finger_index][limb_index].insert(0, angle_list[finger_index][limb_index][0])
+        # Appends angle data
+        for finger_index in range(0, NUM_FINGERS):
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                # Retrieves relevant angle values
+                previous_angle = smooth_old_angle_list[finger_index][limb_index][f - 1]
+                current_angle = smooth_old_angle_list[finger_index][limb_index][f]
+
+                # Computes difference
+                angle_dif = current_angle - previous_angle
+
+                # Computes slope
+                slope = float(angle_dif) / time_dif
+
+                # Appends the angles to the new list
+                for c in range(0, round(frames_in_between) + 1):
+                    angle_list[finger_index][limb_index].append(previous_angle + slope * c * time_between_frames)
+
+    # Adds the missing front data
+    time_list.insert(0, time_list[0])
+    for finger_index in range(0, NUM_FINGERS):
+        sensor_list[finger_index].insert(0, sensor_list[finger_index][0])
+        for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+            angle_list[finger_index][limb_index].insert(0, angle_list[finger_index][limb_index][0])
+
+    # Goes through the function as many times as indicated
+    return smooth_data(new_frame_rate, new_frame_rate,
+                       time_list, sensor_list, angle_list,
+                       times_remain=times_remain - 1)
 
 
 # Post-processing to obtain limb angular velocity/acceleration
@@ -176,27 +197,73 @@ def generate_derivative_limb_data(original_list):
     return derivative_list
 
 
-for finger_index in range(0, NUM_FINGERS):
-    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-        # Calculated limb velocities based on the limb angles
-        velocity_list[finger_index][limb_index] = generate_derivative_limb_data(angle_list[finger_index][limb_index])
-        # Calculated limb accelerations based on the limb velocities
-        acceleration_list[finger_index][limb_index] = generate_derivative_limb_data(
-            velocity_list[finger_index][limb_index])
+def post_data_processor(old_file_name, new_file_name, old_frame_rate, new_frame_rate, times_remain=1):
+    # Obtains old file input
+    reader = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + old_file_name + ".hdf5", 'r')
 
-# Just in case
-assert len(angle_list[0][0]) == len(velocity_list[0][0]) == len(acceleration_list[0][0]) \
-       == len(time_list) == len(sensor_list[0])
+    old_time_list = float_int_unknownArray2list(reader.get("time"))
+    old_sensor_list = float_int_unknownArray2list(reader.get("sensor"))
+    old_angle_list = float_int_unknownArray2list(reader.get("angle"))
 
-print("Saving the data...")
+    reader.close()
 
-# Saves the training data
-hf = h5py.File("./training_datasets/" + NEW_FILE_NAME + ".hdf5", 'w')
-hf.create_dataset("time", data=time_list)
-hf.create_dataset("sensor", data=sensor_list)
-hf.create_dataset("angle", data=angle_list)
-hf.create_dataset("velocity", data=velocity_list)
-hf.create_dataset("acceleration", data=acceleration_list)
-hf.close()
+    assert len(old_time_list) == len(old_sensor_list[0]) == len(old_angle_list[0][0])
 
-print("All done.")
+    # Computes the smoothing
+    print("Computing the smoothing...")
+    time_list, sensor_list, angle_list = smooth_data(
+        old_frame_rate=old_frame_rate,
+        new_frame_rate=new_frame_rate,
+        old_time_list=old_time_list,
+        old_sensor_list=old_sensor_list,
+        old_angle_list=old_angle_list,
+        times_remain=times_remain)
+    # Data to fill and return
+    velocity_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
+    acceleration_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
+
+    for finger_index in range(0, NUM_FINGERS):
+        for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+            # Calculated limb velocities based on the limb angles
+            velocity_list[finger_index][limb_index] = generate_derivative_limb_data(
+                angle_list[finger_index][limb_index])
+            # Calculated limb accelerations based on the limb velocities
+            acceleration_list[finger_index][limb_index] = generate_derivative_limb_data(
+                velocity_list[finger_index][limb_index])
+
+    # Just in case
+    assert len(angle_list[0][0]) == len(velocity_list[0][0]) == len(acceleration_list[0][0]) \
+           == len(time_list) == len(sensor_list[0])
+
+    print("Saving the data...")
+
+    # Saves the training data
+    hf = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + new_file_name + ".hdf5", 'w')
+    hf.create_dataset("time", data=time_list)
+    hf.create_dataset("sensor", data=sensor_list)
+    hf.create_dataset("angle", data=angle_list)
+    hf.create_dataset("velocity", data=velocity_list)
+    hf.create_dataset("acceleration", data=acceleration_list)
+    hf.close()
+
+    print("Data is saved.")
+
+
+post_data_processor(old_file_name=ORIGINAL_FILE_NAME, new_file_name=NEW_FILE_NAME,
+                    old_frame_rate=ORIGINAL_FRAME_RATE, new_frame_rate=NEW_FRAME_RATE,
+                    times_remain=loop_times)
+
+if manual_control:
+    next_frame = "next"
+    while next_frame == "next" or next_frame == "n":
+        PlotData(training_name=NEW_FILE_NAME)
+
+        next_frame = input("'next' frame? (any other input results in save) ")
+
+        if next_frame == "next" or next_frame == "n":
+            post_data_processor(old_file_name=NEW_FILE_NAME, new_file_name=NEW_FILE_NAME,
+                                old_frame_rate=NEW_FRAME_RATE, new_frame_rate=NEW_FRAME_RATE,
+                                times_remain=loop_times)
+
+if draw_result:
+    PlotData(training_name=NEW_FILE_NAME)
