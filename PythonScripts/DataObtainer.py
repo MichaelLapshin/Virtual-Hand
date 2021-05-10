@@ -11,7 +11,6 @@ import SensorListener
 import MediapipeHandAngler
 import numpy
 import h5py
-import copy
 
 # Listeners declaration
 sensor_data = SensorListener.SensorReadingsListener()
@@ -26,11 +25,19 @@ zeros = {}
 zeroing_delay = int(input(
     "How much setup time do you need before starting to zero the sensor readings? (Zeroing timer starts after you enter the input)"))
 time.sleep(zeroing_delay)
+
+
+def dict_deepcopy(dict):
+    d = {}
+    for k in dict.keys():
+        d[k] = dict[k]
+    return d
+
 # Zeros the sensor data
 zeros = None
 while zeros is None:
     zeros = sensor_data.get_readings_frame()
-zeros = copy.deepcopy(zeros)
+zeros = dict_deepcopy(zeros)
 sensor_data.wait4new_readings()
 
 # Obtains training information
@@ -82,7 +89,7 @@ acceleration: [[fingerAngular acceleration]*fingers]
 # Dictionaries
 time_list = []
 sensor_list = []
-angle_list = [[[], [], []], [[], [], []], [[], [], []], [[], [], []], [[], [], []]]
+angle_list = [[[] for b in range(0, 3)] for a in range(0, 5)]
 
 # Indexes the incoming sensor data (sensor key character -> number between 0 and total sensor count)
 sensor_to_index_map = {}

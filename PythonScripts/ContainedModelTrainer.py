@@ -8,18 +8,39 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # To decrease amount of warnings (temporary)
 
+import time
+import threading
+
 import numpy as np
 import tensorflow as tf
 import h5py
-import math
-import time
-import sys
 
 from tensorflow.keras import layers
 from tensorflow import keras
+from tensorflow.keras.layers.experimental import preprocessing
+import matplotlib.pyplot as plt
 
 # Leading in the data file
-dataset_name = "RealData15_smoothed"  # input("Name of the dataset: ")
+models_base_name = input("Name of the model base name (to view/create): ")
+dataset_name = input("Name of the dataset: ")  # "RealData15_manual2"
+inp = input("Train a model? ")
+train_model = (inp == "yes" or inp == "y" or inp == "1")
+
+train_new_model = False
+if train_model:
+    inp = input("Train a new model? ")
+    train_new_model = (inp == "yes" or inp == "y" or inp == "1")
+
+epochs = 15000
+learning_rate = 0.0002
+batch_size = 32
+if train_new_model:
+    inp = input("Default values for the training? ")
+    if not (inp == "yes" or inp == "y" or inp == "1"):
+        learning_rate = float(input("Learning rate (float, e.g. 0.0005): "))
+        epochs = int(input("Number of epochs (int, e.g. 5000): "))
+        batch_size = int(input("Batch size (int, e.g. 32): "))
+
 data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + dataset_name + ".hdf5", 'r')
 assert len(data_set["velocity"]) > 0 and data_set["velocity"] is not None
 DATA_FRAMES_PER_SECOND = 50
@@ -32,124 +53,226 @@ NUM_LIMBS_PER_FINGER = len(data_set.get("angle")[0])
 NUM_LIMBS = NUM_FINGERS * NUM_LIMBS_PER_FINGER
 NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
-FRAMES_DIF_COMPARE = 5
-NUM_HIDDEN_NEURONS = 128
-HIDDEN_LAYERS = ["selu" for i in range(0, 10)]
+FRAMES_DIF_COMPARE = 1
+NUM_HIDDEN_NEURONS = 64
+HIDDEN_LAYERS = ["selu" for i in range(0, 5)]
 
 
 def rads_per_second(angle_diff, frame_rate):
     return angle_diff * frame_rate
 
 
-# Leading the training data
+# Gathers the data
+all_features = []
+for finger_index in range(0, NUM_FINGERS):
+    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+        all_features.append(data_set.get("angle")[finger_index][limb_index])
+        all_features.append(data_set.get("velocity")[finger_index][limb_index])
+for sensor_index in range(0, NUM_SENSORS):
+    all_features.append(data_set.get("sensor")[sensor_index])
+
+# Makes sure that data dimensions are valid
+for i in range(1, len(all_features)):
+    assert len(all_features[i]) == len(all_features[i - 1])
+
+# Creating the training data
 training_data = []  # Every index represents a new training feature
 for frame in range(0, NUM_FRAMES):
     frame_data = []
 
-    for finger_index in range(0, NUM_FINGERS):  # TODO, look over this
-        for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-            frame_data.append(data_set.get("angle")[finger_index][limb_index][frame])
-            frame_data.append(
-                rads_per_second(data_set.get("velocity")[finger_index][limb_index][frame], DATA_FRAMES_PER_SECOND))
-
-    for sensor_index in range(0, NUM_SENSORS):
-        frame_data.append(list(data_set.get("sensor"))[sensor_index][frame])
-
-    # for i in range(0, len(frame_data)):
-    #     frame_data[i] = np.array([frame_data[i]])
+    for i in range(0, len(all_features)):
+        frame_data.append(all_features[i][frame])
 
     training_data.append(np.array(frame_data))
 
-# for frame in range(0,NUM_FRAMES):
-#     training_data[frame] = training_data[frame]
-
 label_data = []
 for i in range(1 + FRAMES_DIF_COMPARE, len(training_data)):
-    label_data.append(training_data[i][:NUM_LIMBS * 2:2])
+    label_data.append(
+        training_data[i][1:NUM_LIMBS * 2:2])  # Appends the velocities FRAMES_DIF_COMPARE ahead of training_data
 training_data = training_data[1:-FRAMES_DIF_COMPARE:]
 
-# TODO, temp edit
-# label_data = label_data[:50:]
-# training_data = training_data[:50:]
+print("len(training_data[0]) =", len(training_data[0]))
+print("len(label_data) == len(training_data) == ", len(label_data))
+assert len(label_data) == len(training_data)
 
-print(len(label_data))
-print(len(training_data))
+print("\nLet the training begin!\n")
 
 label_data = np.array(label_data)
 training_data = np.array(training_data)
 
-# TODO, AAAAAAAAAAAAAAAAAAAAAAAAAAA
-# (train_images, train_labels), (
-#     test_images,
-#     test_labels) = keras.datasets.fashion_mnist.load_data()  # Splits the data into the trainins and test sets accordingly
-#
-# class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', "Coat", "Sandal", "Shirt", "Sneaker", "Bag", "Ankle boot"]
-#
-# # Data preprocessing
-# # Explanation: make the data on a scale of 0-1 so that the weights of 0-1 within the network don't struggle as much to shift the value passed around
-# train_images = train_images / 255.0
-# test_images = test_images / 255.0
-#
-# print(type(train_images[0][0][0]))
-# print(type(train_images[0][0]))
-# print(type(train_images[0]))
-# print(type(train_images))
-#
-# # Building a model
-# model = keras.Sequential([
-#     keras.layers.Flatten(input_shape=(28, 28)),  # input later (1)
-#     keras.layers.Dense(128, activation='relu'),  # hidden layer (2)
-#     keras.layers.Dense(10, activation='softmax')  # output layer (3)
-# ])  # creates the layers of the model
-#
-# model.compile(optimizer='adam', loss='sparse_categorical_crossentropy',              metrics=['accuracy'])
-# model.fit(train_images, train_labels,          epochs=1)
-#
-# test_loss, test_acc = model.evaluate(test_images, test_labels, verbose=1)  # compares the model to the test data
-# print('Test accuracy:', test_acc)  # prints the accuracy of the test
-# print('loss:', test_loss)  # TODO, AAAAAAAAAAAAAAAAAAAAAAAAAAA
-# print("")
-# # print(type(training_data[0][0][0]))
-# print(type(training_data[0][0]))
-# print(type(training_data[0]))
-# print(type(training_data))
+normalizer_layer = preprocessing.Normalization()
+normalizer_layer.adapt(training_data)
 
-# TODO, AAAAAAAAAAAAAAAAAAAAAAAAAAA
 
-# Data preprocessing
-# Building a model
-layers = []
-layers.append(keras.layers.Flatten(input_shape=(35, 1)))  # input later (1)
+# print("Means:", normalizer_layer.mean.numpy())
+# first = np.array(training_data[:1])
+# with np.printoptions(precision=2, suppress=True):
+#     print('First example:', first)
+#     print()
+#     print('Normalized:', normalizer_layer(first).numpy())
 
-for act_func in HIDDEN_LAYERS:  # hidden layer (2)
-    layers.append(keras.layers.Dense(128, activation=act_func,
-                                     kernel_initializer=keras.initializers.zeros,
-                                     bias_initializer=keras.initializers.Zeros()))
 
-layers.append(keras.layers.Dense(15, activation='linear',
-                                 kernel_initializer=keras.initializers.zeros,
-                                 bias_initializer=keras.initializers.Zeros()))  # output layer (3))
-model1 = keras.Sequential(layers)  # creates the layers of the model
+def plot_loss(history, name):
+    plt.plot(history.history['loss'], label='mean_absolute_error')
+    # plt.plot(history.history['val_loss'], label='val_loss')
+    # plt.plot(history.history['mean_absolute_error'], label='mean_absolute_error')
+    plt.ylim([0, 0.01])
+    plt.xlabel('Epoch')
+    plt.ylabel('Error [MPG]')
+    plt.title("Absolute Error for " + name)
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
-# Compiles and trains the model
-model1.compile(optimizer='adam', loss=tf.keras.losses.MeanSquaredError(), metrics=['accuracy'])
-model1.fit(training_data, label_data, batch_size=NUM_FRAMES, epochs=1000)
+    # plt.plot(history.history['mean_absolute_percentage_error'], label='mean_absolute_percentage_error')
+    # plt.ylim([0, 1000])
+    # plt.xlabel('Epoch')
+    # plt.ylabel('Error [MPG]')
+    # plt.title("Absolute Percentage Error for " + name)
+    # plt.legend()
+    # plt.grid(True)
+    # plt.show()
 
-test_loss, test_acc = model1.evaluate(training_data, label_data, verbose=1)  # compares the model to the test data
-print('Test accuracy:', test_acc)  # prints the accuracy of the test
-print('loss:', test_loss)
+
+np.set_printoptions(precision=10, suppress=True)
+
+models = []
+# Loads a model by specification
+if not train_new_model:
+    for finger_index in range(0, NUM_FINGERS):
+        models.append([])
+        for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+            models[finger_index].append(
+                tf.keras.models.load_model(
+                    "C:\\Git\\Virtual-Hand\\PythonScripts\\models\\" + models_base_name + "_"
+                    + str(finger_index) + str(limb_index) + ".model",
+                    custom_objects=None, compile=True, options=None
+                )
+            )
+
+
+# Class used to train model on separate thread
+class ModelTrainer(threading.Thread):
+    def __init__(self, model):
+        threading.Thread.__init__(self)  # calls constructor of the Thread class
+        self.done = False
+        self.model = model
+        self.start()
+
+    def run(self):
+        self.history = self.model.fit(
+            training_data, label_data,
+            verbose=0,
+            batch_size=batch_size,
+            epochs=epochs, shuffle=True)
+        self.done = True
+
+
+# Trains the model
+threaded_models = []
+if train_model:
+    if train_new_model:
+        for finger_index in range(0, NUM_FINGERS):
+            threaded_models.append([])
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                # Build the model
+                model_layers = [layers.Input(shape=(NUM_FEATURES,))]
+                for act in HIDDEN_LAYERS:
+                    model_layers.append(layers.Dense(NUM_HIDDEN_NEURONS, activation=act))
+                model_layers.append(layers.Dense(1))
+
+                model = keras.Sequential(model_layers)
+                model.summary()
+
+                # Compile the model
+                model.compile(loss='mean_absolute_error',
+                              optimizer=tf.keras.optimizers.RMSprop(learning_rate=learning_rate),
+                              metrics=['mean_absolute_percentage_error'])
+
+                threaded_models[finger_index].append(ModelTrainer(model))
+
+        done_count = 0
+        while done_count != NUM_LIMBS:
+            time.sleep(120)
+
+            done_count = 0
+            for finger_index in range(0, NUM_FINGERS):
+                for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                    if threaded_models[finger_index][limb_index].done:
+                        done_count += 1
+
+            print(done_count, " are done processing.")
+
+        for finger_index in range(0, NUM_FINGERS):
+            models.append([])
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                history = threaded_models[finger_index][limb_index].history
+                print("-----------------------------------------------------------------------------------------------")
+                print("Done with", str(finger_index), str(limb_index))
+
+                test_absolute_error, test_percent_error = threaded_models[finger_index][limb_index].model.evaluate(
+                    x=training_data, y=label_data, verbose=1)
+
+                print("Test Absolute Error:", test_absolute_error,
+                      "    Test Percent Error:", test_percent_error)
+
+                plot_loss(history, name=str(finger_index) + str(limb_index))
+
+                # Adds the model to the list
+                models[finger_index].append(threaded_models[finger_index][limb_index].model)
+
+    else:  # if train an existing model
+        for finger_index in range(0, NUM_FINGERS):
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                model = models[finger_index][limb_index]
+
+                # Fits the model
+                history = model.fit(
+                    training_data, label_data,
+                    verbose=0,
+                    batch_size=batch_size,
+                    epochs=epochs, shuffle=True)
+
+                test_absolute_error, test_percent_error = model.evaluate(x=training_data, y=label_data, verbose=1)
+
+                print("Done with", str(finger_index), str(limb_index))
+                print("Test Absolute Error:", test_absolute_error,
+                      "    Test Percent Error:", test_percent_error)
+
+                plot_loss(history, name=str(finger_index) + str(limb_index))
+
+print("\nGot the models.\n")
+
 
 # Manual review
+def plot_predictions(model, frames, name):
+    data = []
+    for i in range(0, len(frames)):
+        to_predict = training_data[i].reshape(1, NUM_FEATURES)
+        data.append(model.predict(to_predict)[0][0])
+
+    plt.plot(data)
+    plt.xlabel('Frame')
+    plt.ylabel("Prediction")
+    plt.title('Predictions: ' + name)
+    plt.grid(True)
+    plt.show()
+
+
 review = True
 while review:
-    inp = input("Enter input frame to predict: ")
+    inp = input("Enter a command: ['save', 'quit'/'exit', 'predict']: ")
 
     if inp == "save":
-        model1.save("/models/LatestModel")
+        for finger_index in range(0, NUM_FINGERS):
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                models[finger_index][limb_index].save(
+                    "C:\\Git\\Virtual-Hand\\PythonScripts\\models\\" + models_base_name + "_"
+                    + str(finger_index) + str(limb_index) + ".model")
     elif inp == "quit" or inp == "exit":
         review = False
-    else:
-        print("Input:", str(training_data[int(inp)]))
-        print("Input type:", type(training_data[int(inp)]))
-        print("Value type:", type(training_data[int(inp)][0]))
-        print("Result:", str(model1.predict(training_data[int(inp)])))
+    elif inp == "predict":
+        for finger_index in range(0, NUM_FINGERS):
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                plot_predictions(models[finger_index][limb_index], training_data,
+                                 name=str(finger_index) + str(limb_index))

@@ -38,9 +38,9 @@ void setup() {
 }
 
 void loop() {
-  Serial.println((String) "t " + (long)thumb.get_units());
-  Serial.println((String) "i " + (long)index.get_units());
-  Serial.println((String) "m " + (long)middle.get_units());
-  Serial.println((String) "r " + (long)ring.get_units());
-  Serial.println((String) "p " + (long)pinky.get_units());
+  Serial.println((String) "a " + (long)thumb.get_units());
+  Serial.println((String) "b " + (long)index.get_units());
+  Serial.println((String) "c " + (long)middle.get_units());
+  Serial.println((String) "d " + (long)ring.get_units());
+  Serial.println((String) "e " + (long)pinky.get_units());
 }

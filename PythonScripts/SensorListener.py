@@ -75,7 +75,7 @@ class SensorReadingsListener(threading.Thread):
 
     # Returns unique keys, to be used after the system is setup for accuracy
     def get_key_list(self):
-        return self.sensorReadings.keys()
+        return sorted(self.sensorReadings.keys())
 
     # Getter for the batch of sensor readings list
     def get_readings_frame(self):
