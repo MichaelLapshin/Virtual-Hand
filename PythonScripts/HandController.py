@@ -32,7 +32,9 @@ connection_handler = ClientConnectionHandler()
 sensor_data = SensorReadingsListener()
 sensor_data.start_thread()
 
-print("Waiting to zero the sensors...")
+models_base_name = connection_handler.input() #"RealData15_man.model"  # TODO, make this depend on file later
+
+connection_handler.print("Waiting to zero the sensors...")
 time.sleep(5)
 
 
@@ -50,9 +52,9 @@ while zeros is None:
 zeros = dict_deepcopy(zeros)
 sensor_data.wait4new_readings()
 
-print("Zeroed the sensors.")
 
-models_base_name = "RealData15_man.model"  # TODO, make this depend on file later
+connection_handler.print("Zeroed the sensors.")
+
 
 # Adds the models
 models = []

@@ -76467,3 +76467,6 @@ array([[-4198.2236],
 === Critical: self.reward_history length: 1
 === Critical: DISCOUNTED SUM: -58.71095916368111
 === Critical: ACTOR LOSSES: [<tf.Tensor: shape=(), dtype=float32, numpy=5.35553>]
+Imported the SensorListener.py class successfully.
+Warning, was not able to establish communications with COM3 port.
+Error:  could not open port 'COM3': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2)
