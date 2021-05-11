@@ -31,9 +31,12 @@ if train_model:
     inp = input("Train a new model? ")
     train_new_model = (inp == "yes" or inp == "y" or inp == "1")
 
-epochs = 15000
-learning_rate = 0.0002
-batch_size = 32
+epochs = 1200
+learning_rate = 0.0004
+batch_size = 744
+# epochs = 800 # Todo, keep this data
+# learning_rate = 0.0005 # Todo, keep this data
+# batch_size = 100 # Todo, keep this data
 if train_new_model:
     inp = input("Default values for the training? ")
     if not (inp == "yes" or inp == "y" or inp == "1"):
@@ -53,9 +56,12 @@ NUM_LIMBS_PER_FINGER = len(data_set.get("angle")[0])
 NUM_LIMBS = NUM_FINGERS * NUM_LIMBS_PER_FINGER
 NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
+CHECKON_TIME = 30
 FRAMES_DIF_COMPARE = 1
-NUM_HIDDEN_NEURONS = 64
-HIDDEN_LAYERS = ["selu" for i in range(0, 5)]
+NUM_HIDDEN_NEURONS = 164
+# HIDDEN_LAYERS = ["elu" for i in range(0, 64)]
+# HIDDEN_LAYERS = [tf.keras.layers.LeakyReLU(alpha=0.3) for i in range(0, 16)]
+HIDDEN_LAYERS = ["relu" for i in range(0, 32)]
 
 
 def rads_per_second(angle_diff, frame_rate):
@@ -85,15 +91,22 @@ for frame in range(0, NUM_FRAMES):
 
     training_data.append(np.array(frame_data))
 
+# training_data = training_data[:100:]  # TODO< REMOVE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 label_data = []
-for i in range(1 + FRAMES_DIF_COMPARE, len(training_data)):
-    label_data.append(
-        training_data[i][1:NUM_LIMBS * 2:2])  # Appends the velocities FRAMES_DIF_COMPARE ahead of training_data
+for finger_index in range(0, NUM_FINGERS):
+    label_data.append([])
+    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+        label_data[finger_index].append([])
+        for i in range(1 + FRAMES_DIF_COMPARE, len(training_data)):
+            # Appends the velocities FRAMES_DIF_COMPARE ahead of training_data
+            label_data[finger_index][limb_index].append(
+                training_data[i][1 + 2 * (3 * finger_index + limb_index)])
 training_data = training_data[1:-FRAMES_DIF_COMPARE:]
 
 print("len(training_data[0]) =", len(training_data[0]))
 print("len(label_data) == len(training_data) == ", len(label_data))
-assert len(label_data) == len(training_data)
+assert len(label_data[0][0]) == len(training_data)
 
 print("\nLet the training begin!\n")
 
@@ -124,15 +137,6 @@ def plot_loss(history, name):
     plt.grid(True)
     plt.show()
 
-    # plt.plot(history.history['mean_absolute_percentage_error'], label='mean_absolute_percentage_error')
-    # plt.ylim([0, 1000])
-    # plt.xlabel('Epoch')
-    # plt.ylabel('Error [MPG]')
-    # plt.title("Absolute Percentage Error for " + name)
-    # plt.legend()
-    # plt.grid(True)
-    # plt.show()
-
 
 np.set_printoptions(precision=10, suppress=True)
 
@@ -153,18 +157,21 @@ if not train_new_model:
 
 # Class used to train model on separate thread
 class ModelTrainer(threading.Thread):
-    def __init__(self, model):
+    def __init__(self, model, finger_index, limb_index):
         threading.Thread.__init__(self)  # calls constructor of the Thread class
         self.done = False
         self.model = model
+        self.finger_index = finger_index
+        self.limb_index = limb_index
         self.start()
 
     def run(self):
         self.history = self.model.fit(
-            training_data, label_data,
+            training_data, label_data[self.finger_index][self.limb_index],
             verbose=0,
             batch_size=batch_size,
             epochs=epochs, shuffle=True)
+
         self.done = True
 
 
@@ -178,22 +185,23 @@ if train_model:
                 # Build the model
                 model_layers = [layers.Input(shape=(NUM_FEATURES,))]
                 for act in HIDDEN_LAYERS:
-                    model_layers.append(layers.Dense(NUM_HIDDEN_NEURONS, activation=act))
+                    model_layers.append(layers.Dense(NUM_HIDDEN_NEURONS, activation=act, bias_initializer='zeros'))
                 model_layers.append(layers.Dense(1))
 
                 model = keras.Sequential(model_layers)
                 model.summary()
 
                 # Compile the model
-                model.compile(loss='mean_absolute_error',
+                model.compile(loss="mse",  # loss='mean_absolute_error',
                               optimizer=tf.keras.optimizers.RMSprop(learning_rate=learning_rate),
                               metrics=['mean_absolute_percentage_error'])
 
-                threaded_models[finger_index].append(ModelTrainer(model))
+                threaded_models[finger_index].append(
+                    ModelTrainer(model=model, finger_index=finger_index, limb_index=limb_index))
 
         done_count = 0
         while done_count != NUM_LIMBS:
-            time.sleep(120)
+            time.sleep(CHECKON_TIME)
 
             done_count = 0
             for finger_index in range(0, NUM_FINGERS):
@@ -211,7 +219,7 @@ if train_model:
                 print("Done with", str(finger_index), str(limb_index))
 
                 test_absolute_error, test_percent_error = threaded_models[finger_index][limb_index].model.evaluate(
-                    x=training_data, y=label_data, verbose=1)
+                    x=training_data, y=label_data[finger_index][limb_index], verbose=1)
 
                 print("Test Absolute Error:", test_absolute_error,
                       "    Test Percent Error:", test_percent_error)
