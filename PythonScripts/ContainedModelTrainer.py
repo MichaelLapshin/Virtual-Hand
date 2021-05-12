@@ -31,12 +31,17 @@ if train_model:
     inp = input("Train a new model? ")
     train_new_model = (inp == "yes" or inp == "y" or inp == "1")
 
+# todo, workds well
 epochs = 1200
 learning_rate = 0.0004
+refined_learning_rate = 0.00005
 batch_size = 744
 # epochs = 800 # Todo, keep this data
 # learning_rate = 0.0005 # Todo, keep this data
 # batch_size = 100 # Todo, keep this data
+epochs = 1200
+learning_rate = 0.0004
+batch_size = 744
 if train_new_model:
     inp = input("Default values for the training? ")
     if not (inp == "yes" or inp == "y" or inp == "1"):
@@ -57,10 +62,8 @@ NUM_LIMBS = NUM_FINGERS * NUM_LIMBS_PER_FINGER
 NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
 CHECKON_TIME = 30
-FRAMES_DIF_COMPARE = 1
+FRAMES_DIF_COMPARE = 20
 NUM_HIDDEN_NEURONS = 164
-# HIDDEN_LAYERS = ["elu" for i in range(0, 64)]
-# HIDDEN_LAYERS = [tf.keras.layers.LeakyReLU(alpha=0.3) for i in range(0, 16)]
 HIDDEN_LAYERS = ["relu" for i in range(0, 32)]
 
 
@@ -171,6 +174,13 @@ class ModelTrainer(threading.Thread):
             verbose=0,
             batch_size=batch_size,
             epochs=epochs, shuffle=True)
+
+        # Compile the model # TODO, refine the model witha lower learning rate
+        # self.model.compile(loss="mse",  # loss='mean_absolute_error',
+        #               optimizer=tf.keras.optimizers.RMSprop(learning_rate=learning_rate),
+        #               metrics=['mean_absolute_percentage_error'])
+
+
 
         self.done = True
 

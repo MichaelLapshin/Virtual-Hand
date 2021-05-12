@@ -45,12 +45,32 @@ class SensorReadingsListener(threading.Thread):
 
     # Once the thread starts, continuously read from the port and add any data to the buffer
     def run(self):
+        # Finds the first character
+        while self.running:
+            if self.port.inWaiting() > 0:
+                next_char = self.port.read().decode("utf-8")
+                self.buffer += next_char
+
+                # Finds a space which can be potentially followed by a letter
+                index = -1
+                for i in range(0, len(self.buffer)):
+                    if self.buffer[i] == ' ' or self.buffer[i] == '\n' or self.buffer[i] == '\r':
+                        index = i
+                        break
+
+                if 0 <= index < len(self.buffer) - 1:
+                    schar = str(self.buffer[index + 1])
+                    self.buffer = self.buffer[index + 1::]
+                    if schar not in [" ", "\r", "\n", ".", "-", "0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]:
+                        break
+
+        # Main decoding loop
         while self.running:
 
-            if self.port.inWaiting() > 0:  # len(next_line) > 0:
+            if self.port.inWaiting() > 0:
                 next_char = self.port.read().decode("utf-8")
                 if next_char == "\r":
-                    next_char = " "
+                    next_char = ""
                 elif next_char == "\n":
                     next_char = ""
 
@@ -60,9 +80,17 @@ class SensorReadingsListener(threading.Thread):
                 raw_buffer_data = self.buffer.split(" ")
                 if len(raw_buffer_data) > 0 and raw_buffer_data[0] == "":
                     raw_buffer_data.pop(0)
-                if len(raw_buffer_data) > 0:
+                if len(raw_buffer_data) > 2:
+                    used = ""
                     for index in range(0, max(int(len(raw_buffer_data) / 2) - 1, 0)):
-                        self.sensorReadings[raw_buffer_data[index * 2]] = int(raw_buffer_data[index * 2 + 1])
+                        used += raw_buffer_data[index * 2] + " " + raw_buffer_data[index * 2 + 1] + " "
+                        try: # TODO. bad practice to rely on the try-catch statement, change to soemthing else later
+                            self.sensorReadings[raw_buffer_data[index * 2]] = int(raw_buffer_data[index * 2 + 1])
+                        except:
+                            self.buffer = ""
+
+                    self.buffer = self.buffer.lstrip(used.rstrip(" "))
+                    self.buffer = self.buffer.lstrip(" ")
 
                     # Checks if the dictionary is filled so that it can be used
                     all_keys_have_values = True
