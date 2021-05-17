@@ -12,9 +12,11 @@ import MediapipeHandAngler
 import numpy
 import h5py
 
+BASE_PATH = "C:\\Git Data\\Virtual-Hand-Data\\training_datasets"
+
 # Listeners declaration
 sensor_data = SensorListener.SensorReadingsListener()
-hand_angler = MediapipeHandAngler.HandAngleReader(framerate=30, resolution=480)
+hand_angler = MediapipeHandAngler.HandAngleReader(framerate=10, resolution=480)
 
 # Starts the listeners' threads
 hand_angler.start_thread()
@@ -33,12 +35,14 @@ def dict_deepcopy(dict):
         d[k] = dict[k]
     return d
 
+
 # Zeros the sensor data
 zeros = None
 while zeros is None:
     zeros = sensor_data.get_readings_frame()
 zeros = dict_deepcopy(zeros)
-sensor_data.wait4new_readings()
+# sensor_data.wait4new_readings()
+current_sensor_data = sensor_data.get_readings_frame()
 
 # Obtains training information
 name_confirm = False
@@ -46,8 +50,8 @@ while not name_confirm:
     training_name = input("What is the name of the training?")
     # Figures out the name of the new training set
     name_exists = False
-    for file_name in os.listdir("./training_datasets"):
-        if training_name == file_name:
+    for file_name in os.listdir(BASE_PATH):
+        if training_name + "_raw.hdf5" == file_name:
             name_exists = True
     if not name_exists:
         name_confirm = True
@@ -110,12 +114,12 @@ zero_time_ms = time_ms()
 for frame_num in range(0, seconds_training * training_framerate):
     # Halts the program until it is time to take the next frame of the training data
     while time_ms() - zero_time_ms < 1000 / training_framerate * frame_num:
-        time.sleep(0.01)
+        time.sleep(0.001)
 
-    current_sensor_data = None
-    # Waits until new sensor data is available
-    while current_sensor_data is None:
-        current_sensor_data = sensor_data.get_readings_frame()
+    # current_sensor_data = None
+    # # Waits until new sensor data is available
+    # while current_sensor_data is None:
+    current_sensor_data = sensor_data.get_readings_frame()
 
     # Stores the data
 
@@ -123,7 +127,7 @@ for frame_num in range(0, seconds_training * training_framerate):
     for key in key_list:
         sensor_list[sensor_to_index_map[key]].append(current_sensor_data[key] - zeros[key])
 
-    sensor_data.wait4new_readings()
+    # sensor_data.wait4new_readings()
     # Adds limb angle data
     limb_data = hand_angler.get_all_limb_angles()
     for finger_index in range(0, 5):
@@ -138,9 +142,8 @@ print("The training sequence is now complete.")
 sensor_data.quit()
 hand_angler.quit()
 
-
 # Saves the training data
-hf = h5py.File("./training_datasets/" + training_name + "_raw.hdf5", 'w')
+hf = h5py.File(BASE_PATH + "\\" + training_name + "_raw.hdf5", 'w')
 hf.create_dataset("time", data=time_list)
 hf.create_dataset("sensor", data=sensor_list)
 hf.create_dataset("angle", data=angle_list)

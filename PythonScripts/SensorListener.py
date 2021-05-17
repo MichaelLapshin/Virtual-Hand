@@ -9,7 +9,6 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # To remove the redundant warnings
 import serial
 import time
 import threading
-import subprocess
 
 print("Imported the SensorListener.py class successfully.")
 
@@ -39,7 +38,7 @@ class SensorReadingsListener(threading.Thread):
     # Simple quit function for the thread
     def quit(self):
         self.running = False
-        time.sleep(3)
+        time.sleep(1)
         if self.port.isOpen():
             self.port.close()
 

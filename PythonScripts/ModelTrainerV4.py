@@ -58,7 +58,7 @@ model_name = connection_handler.input()
 critical_print("Received first C# inputs: " + dataset_name + " " + model_name)
 
 # Obtains data
-data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + dataset_name + ".hdf5", 'r')
+data_set = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + dataset_name + ".hdf5", 'r')
 DATA_FRAMES_PER_SECOND = 50
 DATA_PER_LIMB = 2  # todo, set step to 3 when you introduce acceleration
 ms_time_per_data_frame = 1000 / DATA_FRAMES_PER_SECOND

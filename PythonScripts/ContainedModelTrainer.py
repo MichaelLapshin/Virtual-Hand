@@ -31,7 +31,7 @@ if train_model:
     inp = input("Train a new model? ")
     train_new_model = (inp == "yes" or inp == "y" or inp == "1")
 
-# todo, workds well
+# todo, works well
 epochs = 1200
 learning_rate = 0.0004
 refined_learning_rate = 0.00005
@@ -49,7 +49,7 @@ if train_new_model:
         epochs = int(input("Number of epochs (int, e.g. 5000): "))
         batch_size = int(input("Batch size (int, e.g. 32): "))
 
-data_set = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + dataset_name + ".hdf5", 'r')
+data_set = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + dataset_name + ".hdf5", 'r')
 assert len(data_set["velocity"]) > 0 and data_set["velocity"] is not None
 DATA_FRAMES_PER_SECOND = 50
 
@@ -61,8 +61,8 @@ NUM_LIMBS_PER_FINGER = len(data_set.get("angle")[0])
 NUM_LIMBS = NUM_FINGERS * NUM_LIMBS_PER_FINGER
 NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
-CHECKON_TIME = 30
-FRAMES_DIF_COMPARE = 20
+CHECKON_TIME = 60
+FRAMES_DIF_COMPARE = 6
 NUM_HIDDEN_NEURONS = 164
 HIDDEN_LAYERS = ["relu" for i in range(0, 32)]
 
@@ -108,7 +108,7 @@ for finger_index in range(0, NUM_FINGERS):
 training_data = training_data[1:-FRAMES_DIF_COMPARE:]
 
 print("len(training_data[0]) =", len(training_data[0]))
-print("len(label_data) == len(training_data) == ", len(label_data))
+print("len(label_data[0][0]) == len(training_data) == ", len(label_data[0][0]))
 assert len(label_data[0][0]) == len(training_data)
 
 print("\nLet the training begin!\n")
@@ -151,7 +151,7 @@ if not train_new_model:
         for limb_index in range(0, NUM_LIMBS_PER_FINGER):
             models[finger_index].append(
                 tf.keras.models.load_model(
-                    "C:\\Git\\Virtual-Hand\\PythonScripts\\models\\" + models_base_name + "_"
+                    "C:\\Git Data\\Virtual-Hand-Data\\models\\" + models_base_name + "_"
                     + str(finger_index) + str(limb_index) + ".model",
                     custom_objects=None, compile=True, options=None
                 )
@@ -285,7 +285,7 @@ while review:
         for finger_index in range(0, NUM_FINGERS):
             for limb_index in range(0, NUM_LIMBS_PER_FINGER):
                 models[finger_index][limb_index].save(
-                    "C:\\Git\\Virtual-Hand\\PythonScripts\\models\\" + models_base_name + "_"
+                    "C:\\Git Data\\Virtual-Hand-Data\\models\\" + models_base_name + "_"
                     + str(finger_index) + str(limb_index) + ".model")
     elif inp == "quit" or inp == "exit":
         review = False

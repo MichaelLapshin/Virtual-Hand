@@ -108,6 +108,7 @@ public class ClientConnectionHandler
     private int INPUT_PORT;
     private int OUTPUT_PORT;
     private int INPUT_BUFFER_SIZE = 1024;
+    private int TIMEMOUT_MS = 30000;
 
     // Thread-related variables
     private bool running = true;
@@ -134,7 +135,7 @@ public class ClientConnectionHandler
         // Creates socket
         this.output_socket = new TcpClient();
         this.output_socket.Connect(HOST, OUTPUT_PORT);
-        this.output_socket.SendTimeout = 15000;
+        this.output_socket.SendTimeout = TIMEMOUT_MS;
         this.output_socket.Client.NoDelay = true;
         this.output_socket.Client.Blocking = true;
         this.output_socket.NoDelay = true;
@@ -142,7 +143,7 @@ public class ClientConnectionHandler
 
         this.input_socket = new TcpClient();
         this.input_socket.Connect(HOST, INPUT_PORT);
-        this.input_socket.ReceiveTimeout = 15000;
+        this.input_socket.ReceiveTimeout = TIMEMOUT_MS;
         this.input_socket.Client.NoDelay = true;
         this.input_socket.Client.Blocking = true;
         this.input_socket.NoDelay = true;

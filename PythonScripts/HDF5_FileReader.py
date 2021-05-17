@@ -12,7 +12,7 @@ inp = input("Save the plots? ")
 save_as_images = (inp == "yes" or inp == "y" or inp == "1")
 
 # General Information
-reader = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + training_name + ".hdf5", 'r')
+reader = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + training_name + ".hdf5", 'r')
 print("Number of frames =", len(list(reader.get("time"))))
 print("Keys:", reader.keys())
 print("Features length:", len(reader))

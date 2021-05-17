@@ -21,7 +21,10 @@ from ClientConnectionHandlerV2 import ClientConnectionHandler
 # For listening to the sensors
 from SensorListener import SensorReadingsListener
 
+sys.stderr = open("C:\\Git\\Virtual-Hand\\PythonScripts\\PythonClientError_HandController.txt", "w")
+
 # Constants
+ZEROING_TIME_MS = 3000
 NUM_SENSORS = 5
 NUM_FINGERS = 5
 NUM_LIMBS_PER_FINGER = 3
@@ -32,10 +35,34 @@ connection_handler = ClientConnectionHandler()
 sensor_data = SensorReadingsListener()
 sensor_data.start_thread()
 
-models_base_name = connection_handler.input() #"RealData15_man.model"  # TODO, make this depend on file later
+models_base_name = connection_handler.input()  # "RealData15_man.model"  # TODO, make this depend on file later
+FRAMES_PER_SECOND = 50  # TODO, CHANGE THIS TO SOMETHING MORE SUSTAINABLE LATER
 
-connection_handler.print("Waiting to zero the sensors...")
-time.sleep(5)
+connection_handler.print(
+    "Waiting to zero the sensors... (" + str(round(ZEROING_TIME_MS / 1000.0, 1)) + " second delay minimum)")
+
+connection_handler.print("Loading in the models...")
+# Loads in the models while we wait for the zeroing to happen
+milliseconds = int(time.time() * 1000)
+
+# Adds the models
+models = []
+for finger_index in range(0, NUM_FINGERS):
+    models.append([])
+    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+        models[finger_index].append(tf.keras.models.load_model(
+            "C:\\Git Data\\Virtual-Hand-Data\\models\\" + models_base_name + "_"
+            + str(finger_index) + str(limb_index) + ".model",
+            custom_objects=None, compile=True, options=None
+        ))
+        connection_handler.print("Loaded in limb " + str(finger_index) + str(limb_index) + ".")
+        connection_handler.input()
+
+connection_handler.print("Loaded in the models.")
+
+while time.time() * 1000 - milliseconds < ZEROING_TIME_MS:
+    time.sleep(0.005)
+    print()
 
 
 def dict_deepcopy(dict):
@@ -50,21 +77,8 @@ zeros = None
 while zeros is None:
     zeros = sensor_data.get_readings_frame()
 zeros = dict_deepcopy(zeros)
-sensor_data.wait4new_readings()
-
 
 connection_handler.print("Zeroed the sensors.")
-
-
-# Adds the models
-models = []
-for finger_index in range(0, NUM_FINGERS):
-    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-        models.append(tf.keras.models.load_model(
-            "C:\\Git\\Virtual-Hand\\PythonScripts\\models\\" + models_base_name + "_"
-            + str(finger_index) + str(limb_index) + ".model",
-            custom_objects=None, compile=True, options=None
-        ))
 
 # TODO, multithread the prediction of model data?
 
@@ -76,27 +90,30 @@ while running:
         running = False
     else:
         # Obtains limb data from the C# Unity script
-        string_limb_data = connection_handler.input().rstrip(" $").split(" ")
+        string_limb_data = connection_handler.input().split(" ")
         limb_data = []
         for i in range(0, len(string_limb_data)):
             limb_data.append(float(string_limb_data[i]))
+            if i % 2 == 1:
+                limb_data[i] = limb_data[i] * FRAMES_PER_SECOND
 
         # Obtains the sensors data
         current_sensor_data = sensor_data.get_readings_frame()  # Retrieves the sensors dictionary
         keys = sensor_data.get_key_list()
         sensors_data = []
         for k in keys:
+            assert len(current_sensor_data) == len(zeros)
             sensors_data.append(current_sensor_data[k] - zeros[k])
 
         # Creates the features list
-        features = limb_data + sensors_data
+        features = np.array(limb_data + sensors_data)
 
         # Computes the velocities that the virtual hand limbs should acquire
         next_velocities = []
         for finger_index in range(0, NUM_FINGERS):
             for limb_index in range(0, NUM_LIMBS_PER_FINGER):
                 to_predict = features.reshape(1, NUM_FEATURES)
-                models[finger_index][limb_index].predict(to_predict)
+                next_velocities.append(models[finger_index][limb_index].predict(to_predict)[0][0] * FRAMES_PER_SECOND)
 
         # Prepared the velocities to send to the unity script
         string_velocities = ""

@@ -27,6 +27,7 @@ def controlled_print(message):
 class ClientConnectionHandler:
     running = True
     input_buffer = ""
+    SOCKET_TIMEOUT_SECONDS = 30.0
 
     def __init__(self, HOST="127.0.0.1", INPUT_PORT=6000, OUTPUT_PORT=5000):
         self.HOST = HOST
@@ -44,6 +45,9 @@ class ClientConnectionHandler:
         self.input_socket.setsockopt(socket.SOL_SOCKET, socket.TCP_NODELAY, True)
         self.input_socket.connect((self.HOST, self.INPUT_PORT))
         time.sleep(0.5)
+
+        self.input_socket.settimeout(ClientConnectionHandler.SOCKET_TIMEOUT_SECONDS)
+        self.output_socket.settimeout(ClientConnectionHandler.SOCKET_TIMEOUT_SECONDS)
 
         self.lock = threading.Lock()
 

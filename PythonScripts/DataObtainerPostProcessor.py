@@ -199,7 +199,7 @@ def generate_derivative_limb_data(original_list):
 
 def post_data_processor(old_file_name, new_file_name, old_frame_rate, new_frame_rate, times_remain=1):
     # Obtains old file input
-    reader = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + old_file_name + ".hdf5", 'r')
+    reader = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + old_file_name + ".hdf5", 'r')
 
     old_time_list = float_int_unknownArray2list(reader.get("time"))
     old_sensor_list = float_int_unknownArray2list(reader.get("sensor"))
@@ -238,7 +238,7 @@ def post_data_processor(old_file_name, new_file_name, old_frame_rate, new_frame_
     print("Saving the data...")
 
     # Saves the training data
-    hf = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + new_file_name + ".hdf5", 'w')
+    hf = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + new_file_name + ".hdf5", 'w')
     hf.create_dataset("time", data=time_list)
     hf.create_dataset("sensor", data=sensor_list)
     hf.create_dataset("angle", data=angle_list)

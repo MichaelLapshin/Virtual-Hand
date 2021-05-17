@@ -47,14 +47,11 @@ def extract_coord(joint):
 
 
 class HandAngleReader(threading.Thread):
-    limb_angles = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]
-    framerate = 10
-    resolution = 100
-    running = True
 
-    def __init__(self, framerate=30, resolution=480):
+    def __init__(self, framerate=10, resolution=480, video_source=0):
         threading.Thread.__init__(self)  # calls constructor of the Thread class
         self.daemon = True
+        self.running = True
 
         self.framerate = framerate
         self.resolution = resolution
@@ -64,8 +61,10 @@ class HandAngleReader(threading.Thread):
         self.mp_hands = mp.solutions.hands
 
         # For webcam input:
-        self.cap = cv2.VideoCapture(0)
-        self.cap.set(cv2.CAP_PROP_FPS, framerate)  # Sets FPS of the video feed to 10 FPS
+        self.cap = cv2.VideoCapture(video_source)
+        self.cap.set(cv2.CAP_PROP_FPS, framerate)  # Sets FPS of the video feed
+
+        self.limb_angles = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]
 
     def start_thread(self):
         self.start()

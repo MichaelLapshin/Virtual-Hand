@@ -13,7 +13,7 @@ import pandas as pd
 class PlotData:
 
     def __init__(self, training_name, show_images=True, save_as_images=False):
-        reader = h5py.File("C:\\Git\\Virtual-Hand\\PythonScripts\\training_datasets\\" + training_name + ".hdf5", 'r')
+        reader = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + training_name + ".hdf5", 'r')
 
         # Plots the data below
         plt.title("Time")

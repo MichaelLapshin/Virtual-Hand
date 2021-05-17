@@ -20,6 +20,7 @@ def controlled_print(message):
 # Constants
 INPUT_PORT = 5000  # the port through which the server receives information
 OUTPUT_PORT = 6000  # the port through which the server sends information to the clients
+SOCKET_TIMEOUT_SECONDS = 30.0
 
 # Generates basic connection
 # Input socket
@@ -116,8 +117,8 @@ def connection_establisher():
         output_connection, output_client_address = output_socket.accept()
         time.sleep(0.5)
 
-        input_connection.settimeout(12.0)
-        output_connection.settimeout(12.0)
+        input_connection.settimeout(SOCKET_TIMEOUT_SECONDS)
+        output_connection.settimeout(SOCKET_TIMEOUT_SECONDS)
 
         input_connection.setblocking(True)
         output_connection.setblocking(True)
