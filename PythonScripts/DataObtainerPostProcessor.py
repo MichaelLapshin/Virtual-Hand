@@ -52,7 +52,32 @@ if not manual_control:
 # Constants
 NUM_FINGERS = 5
 NUM_LIMBS_PER_FINGER = 3
+NUM_SENSORS = 5
 eps = np.finfo(np.float32).eps.item()
+
+
+def average(data_list):
+    sum = 0
+    for i in data_list:
+        sum += i
+    return float(sum) / len(data_list)
+
+
+# Computes running average of sensor data by looking running_average frames ahead
+def compute_forward_running_average(original_list, running_average=1):
+    assert running_average > 0
+
+    new_list = []
+
+    for s in range(0, len(original_list) - running_average + 1):
+        new_list.append(average(original_list[s:running_average:]))
+
+    for i in original_list[len(original_list) - running_average::]:
+        new_list.append(i)
+
+    assert len(original_list) == len(new_list)
+
+    return new_list
 
 
 # Original lists which the post-processing will be based off of
@@ -67,13 +92,6 @@ def float_int_unknownArray2list(u_list):
         u_list[i] = float_int_unknownArray2list(u_list[i])
 
     return u_list
-
-
-# def loss_difference(focus_angle, question_angle):
-#     if focus_angle - question_angle != 0:
-#         return math.pow(math.fabs((focus_angle - question_angle)*10), 1.0 / 3)/10
-#     else:
-#         return 0
 
 
 def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, old_angle_list, times_remain=1):
@@ -123,17 +141,10 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
     new_ms_per_frame = 1000.0 / new_frame_rate
 
     for f in range(1, len(old_time_list)):
-        # Retrieves relevant time values
-        # previous_time = old_time_list[f - 1]
-        # current_time = old_time_list[f]
-
         # Computes difference
-        # time_dif = current_time - previous_time
         time_dif = old_ms_per_frame
         current_time = f * time_dif
         previous_time = current_time - time_dif
-
-        # assert time_dif > 0
 
         # Computes how many frames and the time difference between each frame to be used
         frames_in_between = float(time_dif) / new_ms_per_frame - 1  # rounds number
@@ -144,10 +155,10 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
             time_list.append(int(previous_time + time_between_frames * c))
 
         # Appends sensor data
-        for finger_index in range(0, NUM_FINGERS):
+        for sensor_index in range(0, NUM_SENSORS):
             # Retrieves relevant sensor values
-            previous_sensor = old_sensor_list[finger_index][f - 1]
-            current_sensor = old_sensor_list[finger_index][f]
+            previous_sensor = old_sensor_list[sensor_index][f - 1]
+            current_sensor = old_sensor_list[sensor_index][f]
 
             # Computes difference
             sensor_dif = current_sensor - previous_sensor
@@ -156,7 +167,7 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
             slope = float(sensor_dif) / time_dif
 
             for c in range(0, round(frames_in_between) + 1):
-                sensor_list[finger_index].append(previous_sensor + slope * c * time_between_frames)
+                sensor_list[sensor_index].append(previous_sensor + slope * c * time_between_frames)
 
         # Appends angle data
         for finger_index in range(0, NUM_FINGERS):
@@ -177,8 +188,11 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
 
     # Adds the missing front data
     time_list.insert(0, time_list[0])
-    for finger_index in range(0, NUM_FINGERS):
+
+    for sensor_index in range(0, sensor_index):
         sensor_list[finger_index].insert(0, sensor_list[finger_index][0])
+
+    for finger_index in range(0, NUM_FINGERS):
         for limb_index in range(0, NUM_LIMBS_PER_FINGER):
             angle_list[finger_index][limb_index].insert(0, angle_list[finger_index][limb_index][0])
 
@@ -207,6 +221,11 @@ def post_data_processor(old_file_name, new_file_name, old_frame_rate, new_frame_
 
     reader.close()
 
+    # Running average computations
+    for sensor_index in range(0, NUM_SENSORS):
+        old_sensor_list[sensor_index] = compute_forward_running_average(old_sensor_list[sensor_index],
+                                                                        running_average=2)
+
     assert len(old_time_list) == len(old_sensor_list[0]) == len(old_angle_list[0][0])
 
     # Computes the smoothing
@@ -227,6 +246,7 @@ def post_data_processor(old_file_name, new_file_name, old_frame_rate, new_frame_
             # Calculated limb velocities based on the limb angles
             velocity_list[finger_index][limb_index] = generate_derivative_limb_data(
                 angle_list[finger_index][limb_index])
+
             # Calculated limb accelerations based on the limb velocities
             acceleration_list[finger_index][limb_index] = generate_derivative_limb_data(
                 velocity_list[finger_index][limb_index])

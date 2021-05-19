@@ -15,7 +15,7 @@ import h5py
 BASE_PATH = "C:\\Git Data\\Virtual-Hand-Data\\training_datasets"
 
 # Listeners declaration
-sensor_data = SensorListener.SensorReadingsListener(running_average=1, num_samples=1)
+sensor_data = SensorListener.SensorReadingsListener()
 hand_angler = MediapipeHandAngler.HandAngleReader(framerate=10, resolution=480)
 
 # Starts the listeners' threads

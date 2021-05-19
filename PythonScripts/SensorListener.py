@@ -14,14 +14,17 @@ print("Imported the SensorListener.py class successfully.")
 
 
 class SensorReadingsListener(threading.Thread):
-    buffer = ""  # Oldest element is first
-    sensorReadings = {}
-    wait4readings = True
-    running = True
 
     def __init__(self):
         threading.Thread.__init__(self)  # calls constructor of the Thread class
         self.daemon = True
+
+        # Running variables
+        self.buffer = ""  # Oldest element is first
+        self.sensorReadings = {}
+        self.wait4readings = True
+        self.running = True
+
         try:
             self.port = serial.Serial('COM3', 9600, timeout=100)  # for COM3
             time.sleep(0.5)
@@ -83,7 +86,7 @@ class SensorReadingsListener(threading.Thread):
                     used = ""
                     for index in range(0, max(int(len(raw_buffer_data) / 2) - 1, 0)):
                         used += raw_buffer_data[index * 2] + " " + raw_buffer_data[index * 2 + 1] + " "
-                        try: # TODO. bad practice to rely on the try-catch statement, change to soemthing else later
+                        try:  # TODO. bad practice to rely on the try-catch statement, change to soemthing else later
                             self.sensorReadings[raw_buffer_data[index * 2]] = int(raw_buffer_data[index * 2 + 1])
                         except:
                             self.buffer = ""

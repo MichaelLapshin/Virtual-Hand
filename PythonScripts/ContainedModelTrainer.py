@@ -61,24 +61,39 @@ NUM_LIMBS_PER_FINGER = len(data_set.get("angle")[0])
 NUM_LIMBS = NUM_FINGERS * NUM_LIMBS_PER_FINGER
 NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
-CHECKON_TIME = 60
+CHECKON_TIME = 10
 FRAMES_DIF_COMPARE = 6
-NUM_HIDDEN_NEURONS = 164
-HIDDEN_LAYERS = ["relu" for i in range(0, 32)]
+# NUM_HIDDEN_NEURONS = 164
+# HIDDEN_LAYERS = ["relu" for i in range(0, 32)]
+NUM_HIDDEN_NEURONS = 70
+HIDDEN_LAYERS = ["relu" for i in range(0, 8)]
 
-
+# Basic rotational velocity calculation
 def rads_per_second(angle_diff, frame_rate):
     return angle_diff * frame_rate
 
 
-# Gathers the data
+# Shifts the data within a list. shift > 0 moves the data up the positions
+def shift_data(old_list, shift=0):
+    new_list = old_list[-shift::]
+    new_list += old_list[:-shift:]
+    return new_list
+
+
+# Gathers the data (and shifts the data appropriately)
 all_features = []
+label_data = []
 for finger_index in range(0, NUM_FINGERS):
+    label_data.append([])
     for limb_index in range(0, NUM_LIMBS_PER_FINGER):
         all_features.append(data_set.get("angle")[finger_index][limb_index])
         all_features.append(data_set.get("velocity")[finger_index][limb_index])
+
+        label_data[finger_index].append(
+            shift_data(list(data_set.get("velocity")[finger_index][limb_index]), -FRAMES_DIF_COMPARE))
+
 for sensor_index in range(0, NUM_SENSORS):
-    all_features.append(data_set.get("sensor")[sensor_index])
+    all_features.append(shift_data(list(data_set.get("sensor")[sensor_index]), -FRAMES_DIF_COMPARE))
 
 # Makes sure that data dimensions are valid
 for i in range(1, len(all_features)):
@@ -96,15 +111,10 @@ for frame in range(0, NUM_FRAMES):
 
 # training_data = training_data[:100:]  # TODO< REMOVE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-label_data = []
+# Crops the data to avoid wrapping data from the data shift
 for finger_index in range(0, NUM_FINGERS):
-    label_data.append([])
     for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-        label_data[finger_index].append([])
-        for i in range(1 + FRAMES_DIF_COMPARE, len(training_data)):
-            # Appends the velocities FRAMES_DIF_COMPARE ahead of training_data
-            label_data[finger_index][limb_index].append(
-                training_data[i][1 + 2 * (3 * finger_index + limb_index)])
+        label_data[finger_index][limb_index] = label_data[finger_index][limb_index][1:-FRAMES_DIF_COMPARE:]
 training_data = training_data[1:-FRAMES_DIF_COMPARE:]
 
 print("len(training_data[0]) =", len(training_data[0]))
@@ -118,14 +128,6 @@ training_data = np.array(training_data)
 
 normalizer_layer = preprocessing.Normalization()
 normalizer_layer.adapt(training_data)
-
-
-# print("Means:", normalizer_layer.mean.numpy())
-# first = np.array(training_data[:1])
-# with np.printoptions(precision=2, suppress=True):
-#     print('First example:', first)
-#     print()
-#     print('Normalized:', normalizer_layer(first).numpy())
 
 
 def plot_loss(history, name):
@@ -179,8 +181,6 @@ class ModelTrainer(threading.Thread):
         # self.model.compile(loss="mse",  # loss='mean_absolute_error',
         #               optimizer=tf.keras.optimizers.RMSprop(learning_rate=learning_rate),
         #               metrics=['mean_absolute_percentage_error'])
-
-
 
         self.done = True
 

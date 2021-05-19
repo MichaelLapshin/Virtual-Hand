@@ -61,7 +61,7 @@ public class HandController : MonoBehaviour
         string scriptPath = @"C:\Git\Virtual-Hand\PythonScripts\HandController.py";
         // string modelName = "Real"; // TODO, remove hard coded at some point
         // string modelName = "RealData15_shifted20"; // TODO, remove hard coded at some point
-        string modelName = "T180_D20"; // TODO, remove hard coded at some point
+        string modelName = "T180_D6"; // TODO, remove hard coded at some point
         process.StartInfo.Arguments = scriptPath;
 
         // Starts the process
@@ -81,6 +81,7 @@ public class HandController : MonoBehaviour
             print("From Python: '" + connection.readline() + "'");
             connection.println("Keep alive message.");
         }
+
         print("From_Python: '" + connection.readline() + "'");
         print("From_Python: '" + connection.readline() + "'");
 
@@ -150,7 +151,12 @@ public class HandController : MonoBehaviour
                 limbData[i * 2] = movableLimbs[i].transform.localEulerAngles.x;
                 limbData[i * 2 + 1] = rigidBodies[i].angularVelocity.x;
 
-                if (i % 3 != 0
+                if (movableLimbs[i].transform.localEulerAngles.x < 0)
+                {
+                    movableLimbs[i].transform.localEulerAngles = new Vector3(0, 0, 0);
+                    rigidBodies[i].angularVelocity = new Vector3(0, 0, 0);
+                }
+                else if (i % 3 != 0
                 ) // TODO, if this works, then make a function that searches for the nearest parent with a rigid body (if exists)
                 {
                     rigidBodies[i].angularVelocity =
@@ -162,12 +168,6 @@ public class HandController : MonoBehaviour
                 {
                     // Applies the current velocity to the hand
                     rigidBodies[i].angularVelocity = new Vector3(limb_velocities[i], 0, 0);
-                }
-
-                if (movableLimbs[i].transform.localEulerAngles.x < 0)
-                {
-                    movableLimbs[i].transform.localEulerAngles = new Vector3(0,0,0);
-                    rigidBodies[i].angularVelocity = new Vector3(0, 0, 0);
                 }
             }
         }
