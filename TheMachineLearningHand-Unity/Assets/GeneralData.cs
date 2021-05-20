@@ -57,7 +57,7 @@ public class GeneralData : MonoBehaviour
 
         return movableLimbs;
     }
-    
+
 
     /**
      * Splits the string into float array where elements are divided by a space (' ')
@@ -69,7 +69,7 @@ public class GeneralData : MonoBehaviour
 
         for (int i = 0; i < stringData.Length; i++)
         {
-            floatArrayData[i] = float.Parse(stringData[i]);
+            floatArrayData[i] = (float) (double.Parse(stringData[i])); //, System.Globalization.NumberStyles.Float);
         }
 
         return floatArrayData;

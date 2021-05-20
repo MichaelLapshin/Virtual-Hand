@@ -42,6 +42,7 @@ public class HandController : MonoBehaviour
         for (int i = 0; i < movableLimbs.Length; i++)
         {
             rigidBodies[i] = ((GameObject) movableLimbs[i]).GetComponent(typeof(Rigidbody)) as Rigidbody;
+            rigidBodies[i].maxAngularVelocity = 12;
         }
 
         print("Started the threads. Detected " + movableLimbs.Length.ToString() + " controllable limbs.");
@@ -61,7 +62,8 @@ public class HandController : MonoBehaviour
         string scriptPath = @"C:\Git\Virtual-Hand\PythonScripts\HandController.py";
         // string modelName = "Real"; // TODO, remove hard coded at some point
         // string modelName = "RealData15_shifted20"; // TODO, remove hard coded at some point
-        string modelName = "T180_D6"; // TODO, remove hard coded at some point
+        // string modelName = "T180_D6"; // TODO, remove hard coded at some point
+        string modelName = "9"; // TODO, remove hard coded at some point
         process.StartInfo.Arguments = scriptPath;
 
         // Starts the process
@@ -112,22 +114,7 @@ public class HandController : MonoBehaviour
 
                 if (i % 2 == 0) // Only converts angular position from degrees to radians
                 {
-                    for (int j = 0; j < 10; j++) // todo, replace this with something more reliable
-                    {
-                        if (angle > 180)
-                        {
-                            angle -= 360;
-                        }
-                        else if (angle < -180)
-                        {
-                            angle += 360;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-
+                    angle = angle > 180 ? angle - 360 : angle;
                     angle *= 0.01745329252f;
                 }
 
@@ -139,35 +126,79 @@ public class HandController : MonoBehaviour
         return stringLimbData;
     }
 
+    private void FixedUpdate()
+    {
+        // TODO, Duplicate code here, figure this out later
+        float[] minAngle = new float[] {0, 0, 0};
+        float[] maxAngle = new float[] {70, 90, 60};
+
+        for (int i = 0; i < movableLimbs.Length; i++)
+        {
+            float angle = movableLimbs[i].transform.localEulerAngles.x;
+            angle = angle > 180 ? angle - 360 : angle;
+            if (i == 0 && angle > 35) // TODO, thumb exception, deal with this properly later
+            {
+                movableLimbs[i].transform.localEulerAngles = new Vector3(35, 0, 0);
+                rigidBodies[i].angularVelocity = Vector3.zero;
+            }
+            else if (angle < minAngle[i % 3])
+            {
+                movableLimbs[i].transform.localEulerAngles = new Vector3(minAngle[i % 3], 0, 0);
+                rigidBodies[i].angularVelocity = Vector3.zero;
+            }
+            else if (angle > maxAngle[i % 3])
+            {
+                movableLimbs[i].transform.localEulerAngles = new Vector3(maxAngle[i % 3], 0, 0);
+                rigidBodies[i].angularVelocity = Vector3.zero;
+            }
+        }
+    }
+
     // Update is called once per frame
     void Update()
     {
         // Continuously records and applies existing velocities to the limbs
         lock (limb_velocities_locker)
         {
+            float[] minAngle = new float[] {0, 0, 0};
+            float[] maxAngle = new float[] {70, 90, 60};
+
             for (int i = 0; i < movableLimbs.Length; i++)
             {
+                float angle = movableLimbs[i].transform.localEulerAngles.x;
+                angle = angle > 180 ? angle - 360 : angle;
+
                 // Records the limb data to send to the Python Script
-                limbData[i * 2] = movableLimbs[i].transform.localEulerAngles.x;
+                limbData[i * 2] = angle;
                 limbData[i * 2 + 1] = rigidBodies[i].angularVelocity.x;
 
-                if (movableLimbs[i].transform.localEulerAngles.x < 0)
+
+                if (i == 0 && angle > 35) // TODO, thumb exception, deal with this properly later
                 {
-                    movableLimbs[i].transform.localEulerAngles = new Vector3(0, 0, 0);
-                    rigidBodies[i].angularVelocity = new Vector3(0, 0, 0);
+                    movableLimbs[i].transform.localEulerAngles = new Vector3(35, 0, 0);
+                    rigidBodies[i].angularVelocity = Vector3.zero;
                 }
-                else if (i % 3 != 0
-                ) // TODO, if this works, then make a function that searches for the nearest parent with a rigid body (if exists)
+                else if (angle < minAngle[i % 3])
+                {
+                    movableLimbs[i].transform.localEulerAngles = new Vector3(minAngle[i % 3], 0, 0);
+                    rigidBodies[i].angularVelocity = Vector3.zero;
+                }
+                else if (angle > maxAngle[i % 3])
+                {
+                    movableLimbs[i].transform.localEulerAngles = new Vector3(maxAngle[i % 3], 0, 0);
+                    rigidBodies[i].angularVelocity = Vector3.zero;
+                }
+                else if (i % 3 == 0)
+                {
+                    // Applies the current velocity to the hand
+                    rigidBodies[i].angularVelocity = new Vector3(limb_velocities[i], 0, 0);
+                }
+                else
                 {
                     rigidBodies[i].angularVelocity =
                         new Vector3(
                             movableLimbs[i].transform.parent.GetComponent<Rigidbody>().angularVelocity.x +
                             limb_velocities[i], 0, 0);
-                }
-                else
-                {
-                    // Applies the current velocity to the hand
-                    rigidBodies[i].angularVelocity = new Vector3(limb_velocities[i], 0, 0);
                 }
             }
         }

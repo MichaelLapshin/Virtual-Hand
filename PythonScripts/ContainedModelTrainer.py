@@ -62,11 +62,11 @@ NUM_LIMBS = NUM_FINGERS * NUM_LIMBS_PER_FINGER
 NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
 CHECKON_TIME = 10
-FRAMES_DIF_COMPARE = 6
-# NUM_HIDDEN_NEURONS = 164
-# HIDDEN_LAYERS = ["relu" for i in range(0, 32)]
-NUM_HIDDEN_NEURONS = 70
-HIDDEN_LAYERS = ["relu" for i in range(0, 8)]
+
+FRAMES_DIF_COMPARE = 2
+NUM_HIDDEN_NEURONS = 24
+HIDDEN_LAYERS = ["relu" for i in range(0, 3)]
+
 
 # Basic rotational velocity calculation
 def rads_per_second(angle_diff, frame_rate):

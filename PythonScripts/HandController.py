@@ -38,6 +38,9 @@ sensor_data.start_thread()
 models_base_name = connection_handler.input()  # "RealData15_man.model"  # TODO, make this depend on file later
 FRAMES_PER_SECOND = 50  # TODO, CHANGE THIS TO SOMETHING MORE SUSTAINABLE LATER
 
+HARD_INPUT_DOMAIN = [-1000000, 1000000]
+HARD_OUTPUT_DOMAIN = [-1000000, 1000000]
+
 connection_handler.print(
     "Waiting to zero the sensors... (" + str(round(ZEROING_TIME_MS / 1000.0, 1)) + " second delay minimum)")
 
@@ -80,7 +83,12 @@ zeros = dict_deepcopy(zeros)
 
 connection_handler.print("Zeroed the sensors.")
 
+
 # TODO, multithread the prediction of model data?
+
+def enforce_domain(domain_list, value):
+    return max(domain_list[0], min(domain_list[1], value))
+
 
 running = True
 while running:
@@ -93,7 +101,9 @@ while running:
         string_limb_data = connection_handler.input().split(" ")
         limb_data = []
         for i in range(0, len(string_limb_data)):
-            limb_data.append(float(string_limb_data[i]))
+            limb_data.append(
+                enforce_domain(HARD_INPUT_DOMAIN, float(string_limb_data[i]))
+            )
             if i % 2 == 1:
                 limb_data[i] = limb_data[i] * FRAMES_PER_SECOND
 
@@ -103,7 +113,9 @@ while running:
         sensors_data = []
         for k in keys:
             assert len(current_sensor_data) == len(zeros)
-            sensors_data.append(current_sensor_data[k] - zeros[k])
+            sensors_data.append(
+                enforce_domain(HARD_INPUT_DOMAIN, current_sensor_data[k] - zeros[k])
+            )
 
         # Creates the features list
         features = np.array(limb_data + sensors_data)
@@ -113,7 +125,10 @@ while running:
         for finger_index in range(0, NUM_FINGERS):
             for limb_index in range(0, NUM_LIMBS_PER_FINGER):
                 to_predict = features.reshape(1, NUM_FEATURES)
-                next_velocities.append(models[finger_index][limb_index].predict(to_predict)[0][0] * FRAMES_PER_SECOND)
+                next_velocities.append(
+                    enforce_domain(HARD_OUTPUT_DOMAIN,
+                                   models[finger_index][limb_index].predict(to_predict)[0][0] * FRAMES_PER_SECOND)
+                )
 
         # Prepared the velocities to send to the unity script
         string_velocities = ""
