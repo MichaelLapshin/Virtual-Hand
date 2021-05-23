@@ -9,6 +9,7 @@ using System.Threading;
 using System.Net.Sockets;
 using Debug = UnityEngine.Debug;
 using System.Windows.Input;
+using NUnit.Compatibility;
 
 public class HandController : MonoBehaviour
 {
@@ -63,7 +64,7 @@ public class HandController : MonoBehaviour
         // string modelName = "Real"; // TODO, remove hard coded at some point
         // string modelName = "RealData15_shifted20"; // TODO, remove hard coded at some point
         // string modelName = "T180_D6"; // TODO, remove hard coded at some point
-        string modelName = "9"; // TODO, remove hard coded at some point
+        string modelName = "23"; // TODO, remove hard coded at some point
         process.StartInfo.Arguments = scriptPath;
 
         // Starts the process
@@ -136,20 +137,26 @@ public class HandController : MonoBehaviour
         {
             float angle = movableLimbs[i].transform.localEulerAngles.x;
             angle = angle > 180 ? angle - 360 : angle;
-            if (i == 0 && angle > 35) // TODO, thumb exception, deal with this properly later
+
+            float velocity = (float) (GeneralData.rads2degrees(rigidBodies[i].angularVelocity.x) * Time.fixedDeltaTime);
+
+            if (i == 0 && angle + velocity > 35) // TODO, thumb exception, deal with this properly later
             {
                 movableLimbs[i].transform.localEulerAngles = new Vector3(35, 0, 0);
                 rigidBodies[i].angularVelocity = Vector3.zero;
+                limb_velocities[i] = 0;
             }
-            else if (angle < minAngle[i % 3])
+            else if (angle + velocity < minAngle[i % 3])
             {
                 movableLimbs[i].transform.localEulerAngles = new Vector3(minAngle[i % 3], 0, 0);
                 rigidBodies[i].angularVelocity = Vector3.zero;
+                limb_velocities[i] = 0;
             }
-            else if (angle > maxAngle[i % 3])
+            else if (angle + velocity > maxAngle[i % 3])
             {
                 movableLimbs[i].transform.localEulerAngles = new Vector3(maxAngle[i % 3], 0, 0);
                 rigidBodies[i].angularVelocity = Vector3.zero;
+                limb_velocities[i] = 0;
             }
         }
     }
@@ -177,16 +184,19 @@ public class HandController : MonoBehaviour
                 {
                     movableLimbs[i].transform.localEulerAngles = new Vector3(35, 0, 0);
                     rigidBodies[i].angularVelocity = Vector3.zero;
+                    limb_velocities[i] = 0;
                 }
                 else if (angle < minAngle[i % 3])
                 {
                     movableLimbs[i].transform.localEulerAngles = new Vector3(minAngle[i % 3], 0, 0);
                     rigidBodies[i].angularVelocity = Vector3.zero;
+                    limb_velocities[i] = 0;
                 }
                 else if (angle > maxAngle[i % 3])
                 {
                     movableLimbs[i].transform.localEulerAngles = new Vector3(maxAngle[i % 3], 0, 0);
                     rigidBodies[i].angularVelocity = Vector3.zero;
+                    limb_velocities[i] = 0;
                 }
                 else if (i % 3 == 0)
                 {

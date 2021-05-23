@@ -63,7 +63,7 @@ NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
 CHECKON_TIME = 10
 
-FRAMES_DIF_COMPARE = 2
+FRAMES_DIF_COMPARE = 0
 NUM_HIDDEN_NEURONS = 24
 HIDDEN_LAYERS = ["relu" for i in range(0, 3)]
 
@@ -112,10 +112,11 @@ for frame in range(0, NUM_FRAMES):
 # training_data = training_data[:100:]  # TODO< REMOVE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 # Crops the data to avoid wrapping data from the data shift
-for finger_index in range(0, NUM_FINGERS):
-    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-        label_data[finger_index][limb_index] = label_data[finger_index][limb_index][1:-FRAMES_DIF_COMPARE:]
-training_data = training_data[1:-FRAMES_DIF_COMPARE:]
+if FRAMES_DIF_COMPARE != 0:
+    for finger_index in range(0, NUM_FINGERS):
+        for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+            label_data[finger_index][limb_index] = label_data[finger_index][limb_index][1:-FRAMES_DIF_COMPARE:]
+    training_data = training_data[1:-FRAMES_DIF_COMPARE:]
 
 print("len(training_data[0]) =", len(training_data[0]))
 print("len(label_data[0][0]) == len(training_data) == ", len(label_data[0][0]))

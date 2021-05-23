@@ -94,6 +94,11 @@ public class GeneralData : MonoBehaviour
             return isAncestor(inQuestion.parent, name);
         }
     }
+
+    public static float rads2degrees(float radians)
+    {
+        return (float) (radians / Math.PI * 180);
+    }
 }
 
 /*

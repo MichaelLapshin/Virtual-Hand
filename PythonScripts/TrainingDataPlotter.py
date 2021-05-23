@@ -54,30 +54,32 @@ class PlotData:
             if show_images:
                 plt.show()
 
-        for finger in range(0, len(list(reader.get("velocity")))):
-            plt.plot(np.array(reader.get("velocity")[finger][0]))
-            plt.plot(np.array(reader.get("velocity")[finger][1]))
-            plt.plot(np.array(reader.get("velocity")[finger][2]))
-            plt.title(label=training_name + " " + finger_name[finger])
-            plt.xlabel("Frame")
-            plt.ylabel("Velocity (radians)")
-            plt.legend(limb_part)
-            if save_as_images:
-                plt.savefig(training_name + "_" + finger_name[finger] + "_velocity.png", bbox_inches='tight')
-            if show_images:
-                plt.show()
+        if reader.get("velocity") is not None:
+            for finger in range(0, len(list(reader.get("velocity")))):
+                plt.plot(np.array(reader.get("velocity")[finger][0]))
+                plt.plot(np.array(reader.get("velocity")[finger][1]))
+                plt.plot(np.array(reader.get("velocity")[finger][2]))
+                plt.title(label=training_name + " " + finger_name[finger])
+                plt.xlabel("Frame")
+                plt.ylabel("Velocity (radians)")
+                plt.legend(limb_part)
+                if save_as_images:
+                    plt.savefig(training_name + "_" + finger_name[finger] + "_velocity.png", bbox_inches='tight')
+                if show_images:
+                    plt.show()
 
-        for finger in range(0, len(list(reader.get("acceleration")))):
-            plt.plot(np.array(reader.get("acceleration")[finger][0]))
-            plt.plot(np.array(reader.get("acceleration")[finger][1]))
-            plt.plot(np.array(reader.get("acceleration")[finger][2]))
-            plt.title(label=training_name + " " + finger_name[finger])
-            plt.xlabel("Frame")
-            plt.ylabel("Acceleration (radians)")
-            plt.legend(limb_part)
-            if save_as_images:
-                plt.savefig(training_name + "_" + finger_name[finger] + "_acceleration.png", bbox_inches='tight')
-            if show_images:
-                plt.show()
+        if reader.get("acceleration") is not None:
+            for finger in range(0, len(list(reader.get("acceleration")))):
+                plt.plot(np.array(reader.get("acceleration")[finger][0]))
+                plt.plot(np.array(reader.get("acceleration")[finger][1]))
+                plt.plot(np.array(reader.get("acceleration")[finger][2]))
+                plt.title(label=training_name + " " + finger_name[finger])
+                plt.xlabel("Frame")
+                plt.ylabel("Acceleration (radians)")
+                plt.legend(limb_part)
+                if save_as_images:
+                    plt.savefig(training_name + "_" + finger_name[finger] + "_acceleration.png", bbox_inches='tight')
+                if show_images:
+                    plt.show()
 
         reader.close()

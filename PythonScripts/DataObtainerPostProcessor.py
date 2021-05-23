@@ -10,6 +10,7 @@ import numpy
 import h5py
 import math
 import numpy as np
+from scipy.signal import savgol_filter
 import time
 
 from TrainingDataPlotter import PlotData
@@ -55,6 +56,9 @@ NUM_LIMBS_PER_FINGER = 3
 NUM_SENSORS = 5
 eps = np.finfo(np.float32).eps.item()
 
+SAVGOL_DISTANCE = int(SMOOTH_FRAMES) + 1 * (int(SMOOTH_FRAMES) % 2) + 1
+SAVGOL_POLY = int(SMOOTH_DIF_THRESHOLD)
+
 
 def average(data_list):
     sum = 0
@@ -70,9 +74,9 @@ def compute_forward_running_average(original_list, running_average=1):
     new_list = []
 
     for s in range(0, len(original_list) - running_average + 1):
-        new_list.append(average(original_list[s:running_average:]))
+        new_list.append(average(original_list[s:s + running_average - 1:]))
 
-    for i in original_list[len(original_list) - running_average::]:
+    for i in original_list[len(original_list) - running_average + 1::]:
         new_list.append(i)
 
     assert len(original_list) == len(new_list)
@@ -98,13 +102,24 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
     if times_remain <= 0:
         return old_time_list, old_sensor_list, old_angle_list
 
+    assert len(old_time_list) == len(old_sensor_list[0]) == len(old_angle_list[0][0])
+
     # Empty lists to be filled by the program
     time_list = []
     sensor_list = [[] for a in range(0, NUM_FINGERS)]
     angle_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
 
     # Smooth the angular data (averages out the angle using nearby samples)
+
     smooth_old_angle_list = [[[] for b in range(0, NUM_LIMBS_PER_FINGER)] for a in range(0, NUM_FINGERS)]
+    # TODO, maybe, maybe not
+    for finger_index in range(0, NUM_FINGERS):
+        for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+            smooth_old_angle_list[finger_index][limb_index] = savgol_filter(old_angle_list[finger_index][limb_index],
+                                                                            SAVGOL_DISTANCE,
+                                                                            SAVGOL_POLY)
+
+    """
     for finger_index in range(0, NUM_FINGERS):
         for limb_index in range(0, NUM_LIMBS_PER_FINGER):
             for f in range(0, len(old_time_list)):
@@ -135,6 +150,7 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
 
                 smooth_old_angle_list[finger_index][limb_index].append(
                     new_angle / frames_considered)  # / frames_considered)
+    """
 
     # Adjust the frame rate (linear interpolation)
     old_ms_per_frame = 1000.0 / old_frame_rate
@@ -189,8 +205,8 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
     # Adds the missing front data
     time_list.insert(0, time_list[0])
 
-    for sensor_index in range(0, sensor_index):
-        sensor_list[finger_index].insert(0, sensor_list[finger_index][0])
+    for sensor_index in range(0, NUM_SENSORS):
+        sensor_list[sensor_index].insert(0, sensor_list[sensor_index][0])
 
     for finger_index in range(0, NUM_FINGERS):
         for limb_index in range(0, NUM_LIMBS_PER_FINGER):
@@ -222,9 +238,11 @@ def post_data_processor(old_file_name, new_file_name, old_frame_rate, new_frame_
     reader.close()
 
     # Running average computations
+    # for sensor_index in range(0, NUM_SENSORS):
+    #     old_sensor_list[sensor_index] = compute_forward_running_average(old_sensor_list[sensor_index],
+    #                                                                     running_average=2)
     for sensor_index in range(0, NUM_SENSORS):
-        old_sensor_list[sensor_index] = compute_forward_running_average(old_sensor_list[sensor_index],
-                                                                        running_average=2)
+        old_sensor_list[sensor_index] = savgol_filter(old_sensor_list[sensor_index], SAVGOL_DISTANCE, SAVGOL_POLY)
 
     assert len(old_time_list) == len(old_sensor_list[0]) == len(old_angle_list[0][0])
 
