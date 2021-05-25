@@ -14,6 +14,7 @@ import threading
 import numpy as np
 import tensorflow as tf
 import h5py
+import math
 
 from tensorflow.keras import layers
 from tensorflow import keras
@@ -22,7 +23,10 @@ import matplotlib.pyplot as plt
 
 # Leading in the data file
 models_base_name = input("Name of the model base name (to view/create): ")
-dataset_name = input("Name of the dataset: ")  # "RealData15_manual2"
+dataset_names = input("Name of the datasets (separated by spaces): ")  # "RealData15_manual2"
+# dataset_names = dataset_names.split(" ")
+dataset_names = ["T180_s", "T300_1_s", "T300_2_s", "T300_3_s"]
+# dataset_names = ["T180_s"]
 inp = input("Train a model? ")
 train_model = (inp == "yes" or inp == "y" or inp == "1")
 
@@ -31,41 +35,31 @@ if train_model:
     inp = input("Train a new model? ")
     train_new_model = (inp == "yes" or inp == "y" or inp == "1")
 
-# todo, works well
-epochs = 1200
-learning_rate = 0.0004
-refined_learning_rate = 0.00005
-batch_size = 744
-# epochs = 800 # Todo, keep this data
-# learning_rate = 0.0005 # Todo, keep this data
-# batch_size = 100 # Todo, keep this data
-epochs = 1200
-learning_rate = 0.0004
-batch_size = 744
+default_training = True
 if train_new_model:
-    inp = input("Default values for the training? ")
+    inp = input("Default training parameters? ")
     if not (inp == "yes" or inp == "y" or inp == "1"):
         learning_rate = float(input("Learning rate (float, e.g. 0.0005): "))
         epochs = int(input("Number of epochs (int, e.g. 5000): "))
         batch_size = int(input("Batch size (int, e.g. 32): "))
-
-data_set = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + dataset_name + ".hdf5", 'r')
-assert len(data_set["velocity"]) > 0 and data_set["velocity"] is not None
-DATA_FRAMES_PER_SECOND = 50
+        default_training = False
 
 # Finger information
-NUM_FRAMES = len(data_set.get("time"))
-NUM_SENSORS = len(data_set.get("sensor"))
-NUM_FINGERS = len(data_set.get("angle"))
-NUM_LIMBS_PER_FINGER = len(data_set.get("angle")[0])
+NUM_FRAMES = None
+NUM_SENSORS = 5
+NUM_FINGERS = 5
+NUM_LIMBS_PER_FINGER = 3
 NUM_LIMBS = NUM_FINGERS * NUM_LIMBS_PER_FINGER
 NUM_FEATURES = NUM_LIMBS * 2 + NUM_SENSORS
 
-CHECKON_TIME = 10
+CHECKON_TIME = 60
 
 FRAMES_DIF_COMPARE = 0
 NUM_HIDDEN_NEURONS = 24
-HIDDEN_LAYERS = ["relu" for i in range(0, 3)]
+# HIDDEN_LAYERS = ["relu" for i in range(0, 3)]
+# HIDDEN_LAYERS = [tf.keras.layers.LeakyReLU() for i in range(0, 3)]
+# HIDDEN_LAYERS = ["linear" for i in range(0, 3)]
+HIDDEN_LAYERS = ["selu" for i in range(0, 3)]
 
 
 # Basic rotational velocity calculation
@@ -80,49 +74,100 @@ def shift_data(old_list, shift=0):
     return new_list
 
 
-# Gathers the data (and shifts the data appropriately)
-all_features = []
-label_data = []
-for finger_index in range(0, NUM_FINGERS):
-    label_data.append([])
-    for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-        all_features.append(data_set.get("angle")[finger_index][limb_index])
-        all_features.append(data_set.get("velocity")[finger_index][limb_index])
+def get_training_data(dataset_name):
+    data_set = h5py.File("C:\\Git Data\\Virtual-Hand-Data\\training_datasets\\" + dataset_name + ".hdf5", 'r')
+    assert len(data_set["velocity"]) > 0 and data_set["velocity"] is not None
 
-        label_data[finger_index].append(
-            shift_data(list(data_set.get("velocity")[finger_index][limb_index]), -FRAMES_DIF_COMPARE))
+    # Finger information
+    current_num_frames = len(data_set.get("time"))
 
-for sensor_index in range(0, NUM_SENSORS):
-    all_features.append(shift_data(list(data_set.get("sensor")[sensor_index]), -FRAMES_DIF_COMPARE))
-
-# Makes sure that data dimensions are valid
-for i in range(1, len(all_features)):
-    assert len(all_features[i]) == len(all_features[i - 1])
-
-# Creating the training data
-training_data = []  # Every index represents a new training feature
-for frame in range(0, NUM_FRAMES):
-    frame_data = []
-
-    for i in range(0, len(all_features)):
-        frame_data.append(all_features[i][frame])
-
-    training_data.append(np.array(frame_data))
-
-# training_data = training_data[:100:]  # TODO< REMOVE THIS!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-# Crops the data to avoid wrapping data from the data shift
-if FRAMES_DIF_COMPARE != 0:
+    # Gathers the data (and shifts the data appropriately)
+    all_features = []
+    current_label_data = []
     for finger_index in range(0, NUM_FINGERS):
+        current_label_data.append([])
         for limb_index in range(0, NUM_LIMBS_PER_FINGER):
-            label_data[finger_index][limb_index] = label_data[finger_index][limb_index][1:-FRAMES_DIF_COMPARE:]
-    training_data = training_data[1:-FRAMES_DIF_COMPARE:]
+            all_features.append(data_set.get("angle")[finger_index][limb_index])
+            all_features.append(data_set.get("velocity")[finger_index][limb_index])
 
-print("len(training_data[0]) =", len(training_data[0]))
-print("len(label_data[0][0]) == len(training_data) == ", len(label_data[0][0]))
-assert len(label_data[0][0]) == len(training_data)
+            current_label_data[finger_index].append(
+                shift_data(list(data_set.get("velocity")[finger_index][limb_index]), -FRAMES_DIF_COMPARE))
+
+    for sensor_index in range(0, NUM_SENSORS):
+        all_features.append(shift_data(list(data_set.get("sensor")[sensor_index]), -FRAMES_DIF_COMPARE))
+
+    # Closes the dataset
+    data_set.close()
+
+    # Makes sure that data dimensions are valid
+    for i in range(1, len(all_features)):
+        assert len(all_features[i]) == len(all_features[i - 1])
+
+    # Creating the training data
+    current_training_data = []  # Every index represents a new training feature
+    for frame in range(0, current_num_frames):
+        frame_data = []
+
+        for i in range(0, len(all_features)):
+            frame_data.append(all_features[i][frame])
+
+        current_training_data.append(np.array(frame_data))
+
+    # Crops the data to avoid wrapping data from the data shift
+    if FRAMES_DIF_COMPARE != 0:
+        for finger_index in range(0, NUM_FINGERS):
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                current_label_data[finger_index][limb_index] = current_label_data[finger_index][limb_index][
+                                                               1:-FRAMES_DIF_COMPARE:]
+        current_training_data = current_training_data[1:-FRAMES_DIF_COMPARE:]
+
+    print("\n===", dataset_name, "===")
+    print("len(current_training_data[0]) =", len(current_training_data[0]))
+    print("len(current_label_data[0][0]) == len(current_training_data) == ", len(current_label_data[0][0]))
+    assert len(current_label_data[0][0]) == len(current_training_data)
+
+    return current_training_data, current_label_data
+
+
+# Gathers all of the data from all of the data sets
+training_data = None
+label_data = None
+
+for dataset in dataset_names:
+    c_training, c_labels = get_training_data(dataset)
+
+    if training_data is None or len(training_data) == 0:
+        training_data = c_training
+    else:
+        training_data += c_training
+
+    if label_data is None or len(label_data) == 0:
+        label_data = c_labels
+    else:
+        for finger_index in range(0, NUM_FINGERS):
+            for limb_index in range(0, NUM_LIMBS_PER_FINGER):
+                label_data[finger_index][limb_index] += c_labels[finger_index][limb_index]
+
+# Finger information (more)
+NUM_FRAMES = len(training_data)
+assert NUM_FRAMES is not None
+
+# Training
+if default_training:
+    epochs = int(3000 + 250 * math.sqrt(NUM_FRAMES))
+    learning_rate = 0.0015
+    batch_size = int(NUM_FRAMES * 0.15)
+
+print("\n===== Official Training Information =====")
+print("learning rate:", learning_rate)
+print("batch_size:", batch_size)
+print("epochs:", epochs)
+print("=========================================\n")
 
 print("\nLet the training begin!\n")
+
+print(np.shape(label_data))
+print(np.shape(training_data))
 
 label_data = np.array(label_data)
 training_data = np.array(training_data)
@@ -133,8 +178,6 @@ normalizer_layer.adapt(training_data)
 
 def plot_loss(history, name):
     plt.plot(history.history['loss'], label='mean_absolute_error')
-    # plt.plot(history.history['val_loss'], label='val_loss')
-    # plt.plot(history.history['mean_absolute_error'], label='mean_absolute_error')
     plt.ylim([0, 0.01])
     plt.xlabel('Epoch')
     plt.ylabel('Error [MPG]')

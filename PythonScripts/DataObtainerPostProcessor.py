@@ -222,7 +222,7 @@ def smooth_data(old_frame_rate, new_frame_rate, old_time_list, old_sensor_list, 
 def generate_derivative_limb_data(original_list):
     derivative_list = []
     for index in range(1, len(original_list)):
-        derivative_list.append(original_list[index] - original_list[index - 1])
+        derivative_list.append((original_list[index] - original_list[index - 1]) * NEW_FRAME_RATE)
     derivative_list.insert(0, derivative_list[0])  # assigns the first element to be that of the second
     return derivative_list
 

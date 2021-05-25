@@ -13,6 +13,7 @@ import numpy
 import h5py
 
 BASE_PATH = "C:\\Git Data\\Virtual-Hand-Data\\training_datasets"
+WARNING_TIMES = [1, 3, 5, 10, 20, 30, 60, 120, 180, 300]
 
 # Listeners declaration
 sensor_data = SensorListener.SensorReadingsListener()
@@ -133,8 +134,14 @@ for frame_num in range(0, seconds_training * training_framerate):
     for finger_index in range(0, 5):
         for limb_index in range(0, 3):
             angle_list[finger_index][limb_index].append(limb_data[finger_index][limb_index])
+
     # Adds time data
     time_list.append(time_ms() - zero_time_ms)
+
+    # Warnings for the user
+    for w in WARNING_TIMES:
+        if frame_num == (seconds_training - w) * training_framerate:
+            print(w, "seconds left...")
 
 print("The training sequence is now complete.")
 

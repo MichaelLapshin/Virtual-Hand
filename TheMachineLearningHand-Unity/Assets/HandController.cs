@@ -64,7 +64,7 @@ public class HandController : MonoBehaviour
         // string modelName = "Real"; // TODO, remove hard coded at some point
         // string modelName = "RealData15_shifted20"; // TODO, remove hard coded at some point
         // string modelName = "T180_D6"; // TODO, remove hard coded at some point
-        string modelName = "23"; // TODO, remove hard coded at some point
+        string modelName = "long2"; // TODO, remove hard coded at some point
         process.StartInfo.Arguments = scriptPath;
 
         // Starts the process
@@ -131,7 +131,7 @@ public class HandController : MonoBehaviour
     {
         // TODO, Duplicate code here, figure this out later
         float[] minAngle = new float[] {0, 0, 0};
-        float[] maxAngle = new float[] {70, 90, 60};
+        float[] maxAngle = new float[] {70, 70, 60};
 
         for (int i = 0; i < movableLimbs.Length; i++)
         {
@@ -168,7 +168,7 @@ public class HandController : MonoBehaviour
         lock (limb_velocities_locker)
         {
             float[] minAngle = new float[] {0, 0, 0};
-            float[] maxAngle = new float[] {70, 90, 60};
+            float[] maxAngle = new float[] {70, 70, 60};
 
             for (int i = 0; i < movableLimbs.Length; i++)
             {
