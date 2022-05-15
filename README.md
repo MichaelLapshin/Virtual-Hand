@@ -1,3 +1,7 @@
+# This repository has been superseded by the new and improved Virtual-Hand-Application https://github.com/MichaelLapshin/Virtual-Hand-Application
+- It includes polished contents from this repository plus an entire front-end and back-end application.
+
+
 # Virtual-Hand
 A force sensor system which uses machine learning to control a virtual hand.
 
